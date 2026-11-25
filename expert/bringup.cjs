@@ -195,6 +195,45 @@ function writeRecord(backend, body) {
   return file;
 }
 
+// Write-time dedup, Mem0-V3 style: an equivalent accepted record (same
+// probe set, same metric id, same catalog sha, median within 3%) makes a
+// new write redundant. The check is deterministic; re-measuring on purpose
+// (cross-session validation) passes --force true.
+function catalogStamp(catalogOpt) {
+  if (!catalogOpt) return { catalog: null, sha: null };
+  const abs = path.resolve(catalogOpt);
+  const doc = JSON.parse(fs.readFileSync(abs, "utf8"));
+  return { catalog: abs.replace(/\\/g, "/"), sha: typeof doc.sha === "string" ? doc.sha : null };
+}
+
+function findDuplicate(newDoc, median) {
+  const metric = newDoc.metrics && newDoc.metrics[0];
+  if (!metric || !Number.isFinite(median)) return null;
+  const keySha = newDoc.catalog_sha ?? null;
+  let files;
+  try {
+    files = fs.readdirSync(recordDir).filter((name) => name.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  for (const name of files) {
+    let doc;
+    try {
+      doc = JSON.parse(fs.readFileSync(path.join(recordDir, name), "utf8"));
+    } catch {
+      continue;
+    }
+    if (doc.probe_set !== newDoc.probe_set) continue;
+    if ((doc.catalog_sha ?? null) !== keySha) continue;
+    const other = (doc.metrics || []).find((item) => item.id === metric.id);
+    if (!other || other.status !== "accepted" || !Number.isFinite(other.median)) continue;
+    if (Math.abs(other.median - median) / median <= 0.03) {
+      return { file: path.join(recordDir, name).replace(/\\/g, "/"), median: other.median };
+    }
+  }
+  return null;
+}
+
 function blockedRecord(backend, reason) {
   const file = writeRecord(backend, {
     perfbind: 1,
@@ -552,7 +591,8 @@ function cmdMeasureModule(opts) {
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
   const metric = { ...parsed, ...stats, clock: "process_cl" };
-  const file = writeRecord(opts.module, {
+  const stampInfo = catalogStamp(opts.catalog);
+  const body = {
     perfbind: 1,
     backend: "opencl",
     probe_set: "module_process_cl",
@@ -565,7 +605,31 @@ function cmdMeasureModule(opts) {
       clock: `one process_cl launch, clFinish, ${width}x${height}`,
     },
     metrics: [metric],
-  });
+  };
+  if (stampInfo.catalog) {
+    body.catalog = stampInfo.catalog;
+    body.catalog_sha = stampInfo.sha;
+  }
+  if (opts.force !== "true" && stats.status === "accepted") {
+    const dup = findDuplicate(body, stats.median);
+    if (dup) {
+      return {
+        ok: true,
+        record: dup.file,
+        duplicate_of: dup.file,
+        dedup: "skipped_write",
+        prices_written: false,
+        metric: {
+          id: metric.id,
+          status: metric.status,
+          median: metric.median,
+          stdev_over_median: metric.stdev_over_median,
+        },
+        note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
+      };
+    }
+  }
+  const file = writeRecord(opts.module, body);
   return {
     ok: stats.status === "accepted",
     record: file.replace(/\\/g, "/"),
@@ -597,7 +661,8 @@ function cmdRunTemplate(opts) {
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
   const metric = { ...parsed, ...stats, clock: "template" };
-  const file = writeRecord(`${opts.shape}_${n}`, {
+  const stampInfo = catalogStamp(opts.catalog);
+  const body = {
     perfbind: 1,
     backend: "opencl",
     probe_set: "shape_template",
@@ -610,7 +675,31 @@ function cmdRunTemplate(opts) {
       clock: `template ${opts.shape} n=${n}, clFinish, ${width}x${height}`,
     },
     metrics: [metric],
-  });
+  };
+  if (stampInfo.catalog) {
+    body.catalog = stampInfo.catalog;
+    body.catalog_sha = stampInfo.sha;
+  }
+  if (opts.force !== "true" && stats.status === "accepted") {
+    const dup = findDuplicate(body, stats.median);
+    if (dup) {
+      return {
+        ok: true,
+        record: dup.file,
+        duplicate_of: dup.file,
+        dedup: "skipped_write",
+        prices_written: false,
+        metric: {
+          id: metric.id,
+          status: metric.status,
+          median: metric.median,
+          stdev_over_median: metric.stdev_over_median,
+        },
+        note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
+      };
+    }
+  }
+  const file = writeRecord(`${opts.shape}_${n}`, body);
   return {
     ok: stats.status === "accepted",
     record: file.replace(/\\/g, "/"),

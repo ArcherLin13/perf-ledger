@@ -957,6 +957,10 @@ function main() {
   if (command === "accuracy") return cmdAccuracy();
   if (command === "wall-fit") return cmdWallFit(opts);
   if (command === "estimate-wall") return cmdEstimateWall(opts);
+  if (command === "doctor") return require("./doctor").cmdDoctor(opts);
+  if (command === "bump-sha") {
+    return require("./project_ledger").cmdBumpSha(opts, { openDb, audit });
+  }
   if (command === "scan-iop") return require("./project_ledger").cmdScanIop(opts);
   if (command === "min-ledger") {
     return require("./project_ledger").cmdMinLedger(opts, { openDb, solveLinear, audit });
@@ -991,7 +995,7 @@ function main() {
     return;
   }
   throw new Error(
-    "commands: init | prices | shapes | estimate | estimate-wall | audit | anchor | anchors | price-set | module-set | check | launch-fit | accuracy | wall-fit | ledger | scan-iop | min-ledger | freeze-tests | score | discover | run-probe | commit-prices | plan-split | annotate-features | measure-module | run-template | exam-predict | exam-score | view"
+    "commands: init | prices | shapes | estimate | estimate-wall | audit | anchor | anchors | price-set | module-set | check | launch-fit | accuracy | wall-fit | ledger | scan-iop | min-ledger | freeze-tests | score | discover | run-probe | commit-prices | plan-split | annotate-features | measure-module | run-template | exam-predict | exam-score | doctor | bump-sha | view"
   );
 }
 

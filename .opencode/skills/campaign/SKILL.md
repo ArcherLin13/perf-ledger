@@ -1,4 +1,5 @@
 ---
+name: campaign
 description: What a performance agent must be able to do on any repository and any platform before it may call a prediction good.
 ---
 
@@ -37,16 +38,16 @@ When the frozen test is exhausted and the score is still short, the answer is th
 
 ## 5. The concrete loop on this machine
 
-1. `scan_iop` and `plan_split` propose the first catalog: minimal training modules, a sampled exam (two test entries per shape cell at different planned sizes), and `claimed` modules that join the claim from classification alone and need no measurement. The exam budget is printed in measure-module runs. The claim is what you classify, not what you measure.
-2. `needs_branch` modules are classifiable. `plan_split` prints a branch digest (each condition with its enqueue counts) so you resolve the default path from the digest, not from reading the whole file. Set `branch_resolved` with a kernel count from source and the module joins the claim. `freeze_tests` names the exact number still missing (`need_additional_claimed`).
-3. `annotate_features`, then `measure_module` on training and test modules the probe can compile, each test at its planned size.
-4. `freeze_tests` is the gate. It refuses to freeze a claim that lacks breadth (a claimed shape with no test), depth (fewer than two declared cost signatures per claimed shape), or coverage (under 80% of classifiable hot paths). The refusal lists exactly what to add. Do not fit before the freeze exists.
-5. `score` is the verdict. It fails when the catalog is not frozen, coverage is under the bar, a frozen claimed test is unmeasured, or a measured test is under 0.85. An unmeasured claimed test is a failure, never a skip.
-6. A failed `score` starts another round: measure an unmeasured claimed test, resolve `model_ambiguous` by measuring a train module where the confounded columns differ, count a new separating feature, or add a benchmark on this platform. Re-freeze only with `refreeze: true`, and score the same frozen set again.
+1. `ledger_scan_iop` and `ledger_plan_split` propose the first catalog: minimal training modules, a sampled exam (two test entries per shape cell at different planned sizes), and `claimed` modules that join the claim from classification alone and need no measurement. The exam budget is printed in measure-module runs. The claim is what you classify, not what you measure.
+2. `needs_branch` modules are classifiable. `ledger_plan_split` prints a branch digest (each condition with its enqueue counts) so you resolve the default path from the digest, not from reading the whole file. Set `branch_resolved` with a kernel count from source and the module joins the claim. `ledger_freeze_tests` names the exact number still missing (`need_additional_claimed`).
+3. `ledger_annotate_features`, then `ledger_measure_module` on training and test modules the probe can compile, each test at its planned size.
+4. `ledger_freeze_tests` is the gate. It refuses to freeze a claim that lacks breadth (a claimed shape with no test), depth (fewer than two declared cost signatures per claimed shape), or coverage (under 80% of classifiable hot paths). The refusal lists exactly what to add. Do not fit before the freeze exists.
+5. `ledger_score` is the verdict. It fails when the catalog is not frozen, coverage is under the bar, a frozen claimed test is unmeasured, or a measured test is under 0.85. An unmeasured claimed test is a failure, never a skip.
+6. A failed `ledger_score` starts another round: measure an unmeasured claimed test, resolve `model_ambiguous` by measuring a train module where the confounded columns differ, count a new separating feature, or add a benchmark on this platform. Re-freeze only with `refreeze: true`, and score the same frozen set again.
 
 ## 6. The template library
 
-A catalog of real modules is sparse: most shape columns move together, so the fit cannot tell them apart (`model_ambiguous`). The template library breaks the tie. `run_template` compiles one synthetic instance — `lut <entries>`, `arith <ops>`, `halo <radius>`, or `launch <count>` — and times it at a chosen size on this platform. Sweep one shape at a time and keep every accepted record.
+A catalog of real modules is sparse: most shape columns move together, so the fit cannot tell them apart (`model_ambiguous`). The template library breaks the tie. `ledger_run_template` compiles one synthetic instance — `lut <entries>`, `arith <ops>`, `halo <radius>`, or `launch <count>` — and times it at a chosen size on this platform. Sweep one shape at a time and keep every accepted record.
 
 A sweep is also how a naive model gets falsified. On iris-xe the `lut` sweep from 64 to 2048 entries is flat (about 2.1 ms at 1920x1080), so table size is not a cost driver here; the per-pixel table read is, and it belongs in `mb_moved`. The `arith` sweep is superlinear in ops, so the feature is `arith_px_sq` (ops squared times megapixels), not a per-op price. The minimum search finds this only when the template rows are in the training pool.
 
@@ -55,9 +56,9 @@ A sweep is also how a naive model gets falsified. On iris-xe the `lut` sweep fro
 A new feature — real code or pseudo code — is examined under seal.
 
 1. Extract its cost features (colorspace, kernels, halo, `lookup_wide`, `lut_entries`, `arith_ops`, size, `mb_moved`).
-2. `exam_predict` seals a report in the audit log before any measurement of that item exists. It refuses to seal when the model is ambiguous; then the answer is more template or train measurements, never a guess.
+2. `ledger_exam_predict` seals a report in the audit log before any measurement of that item exists. It refuses to seal when the model is ambiguous; then the answer is more template or train measurements, never a guess.
 3. Measure the item once, on this platform.
-4. `exam_score` compares the sealed report with the accepted record. Accuracy at least 0.85 is a pass.
+4. `ledger_exam_score` compares the sealed report with the accepted record. Accuracy at least 0.85 is a pass.
 
 A failed exam is an honest verdict, not a bug: the sealed report names the formula, and the gap names the shape the vocabulary is missing. When aces20 was sealed against a template-only experience, the report said 2.22 ms and the measurement said 11.90 ms — the missing shape is per-pixel iteration over its hue tables, which no template instance prices yet. Add that benchmark, then examine the feature again.
 

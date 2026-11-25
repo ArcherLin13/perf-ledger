@@ -2,7 +2,9 @@
 
 这个目录是性能账本和调用它的 agent。扫描、探针、单价、估价、核对都在 `expert/cli.js`。agent 只引用工具打印的 JSON，不自己重算毫秒或 GB/s。
 
-目标不是调熟某一个仓库，而是把平台经验攒成一个"老师傅"：仓库是训练场，冻结测试集是入学考，没见过的新功能是毕业考——先封盘预测再测量，准确率 0.85 达标。机制全文在 `bot/skills/campaign.md`，引用规则在 `bot/skills/ledger-rules.md`。
+目标不是调熟某一个仓库，而是把平台经验攒成一个"老师傅"：仓库是训练场，冻结测试集是入学考，没见过的新功能是毕业考——先封盘预测再测量，准确率 0.85 达标。机制全文在 `.opencode/skills/campaign/SKILL.md`，引用规则在 `.opencode/skills/ledger-rules/SKILL.md`。
+
+这是 opencode 分支：agent、技能、工具按 opencode 的格式放在 `.opencode/` 下。Agent SDK 版本在 `main` 分支。
 
 darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/iop`。账本、探针、目录和 agent 都在本目录。
 
@@ -10,11 +12,11 @@ darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/
 
 | 路径 | 内容 |
 | --- | --- |
-| `bot/agent.ts` | agent。模型是 grok-4.7 |
-| `bot/instructions.md` | agent 每次都要遵守的步骤 |
-| `bot/skills/campaign.md` | 目标与主循环：分类、测量、冻结、评分、毕业考 |
-| `bot/skills/ledger-rules.md` | 引用数字、拒绝模块、两套时钟、已知限制 |
-| `bot/tools/` | agent 调用的工具，内部都是 `node expert/cli.js` |
+| `.opencode/agents/perf-ledger.md` | 主 agent。技能与读操作放行，shell 需确认，编辑拒绝 |
+| `.opencode/skills/campaign/SKILL.md` | 目标与主循环：分类、测量、冻结、评分、毕业考 |
+| `.opencode/skills/ledger-rules/SKILL.md` | 引用数字、拒绝模块、两套时钟、已知限制 |
+| `.opencode/plugins/perf-ledger.js` | 插件，命名空间 `ledger`，15 个工具，内部都是 `node expert/cli.js` |
+| `opencode.jsonc` | `default_agent` 指到 perf-ledger |
 | `expert/cli.js` | 命令行。`expert/package.json` 把这一层标成 CommonJS |
 | `expert/bringup.cjs` | `discover`、`run-probe`、`commit-prices`、`plan-split`、`measure-module`、`run-template` |
 | `expert/project_ledger.js` | `scan-iop`、`annotate-features`、`freeze-tests`、`score`、`min-ledger`、`exam-predict`、`exam-score` |
@@ -36,13 +38,12 @@ darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/
 在本目录执行：
 
 ```bash
-npx @grok/agent-sdk login
-npx @grok/agent-sdk dev --dir .
+opencode
 ```
 
-`login` 之前，模型回合会因缺少 Cursor 凭据失败。`validate`、`discover`、`run-probe` 不需要登录。
+`opencode.jsonc` 把 `default_agent` 设成 `perf-ledger`，开局面就是这个 agent。插件和技能自动从 `.opencode/` 发现。模型回合需要你在 opencode 里配好 provider；`discover`、`run-probe` 这些工具本身不需要模型。
 
-playground 地址由 `dev` 打印。账本网页：
+账本网页：
 
 ```bash
 node expert/cli.js view
@@ -50,27 +51,25 @@ node expert/cli.js view
 
 打开 http://127.0.0.1:8765 。这是整份 sqlite，包含平台单价和历史核对，不只是训练集。
 
-agent 工具和命令的对应关系：
+agent 工具和命令的对应关系（工具都在 `ledger` 命名空间下）：
 
 | 工具 | 命令 |
 | --- | --- |
-| `discover_platform` | `discover` |
-| `run_probe` | `run-probe --backend <id>` |
-| `commit_prices` | `commit-prices --record <file> --platform <id>` |
-| `plan_split` | `plan-split --src <dir> --out <file>` |
-| `scan_iop` | `scan-iop --src <dir>` |
-| `annotate_features` | `annotate-features --catalog <file> --kernels <dir>` |
-| `freeze_tests` | `freeze-tests --catalog <file>` |
-| `score` | `score --catalog <file>` |
-| `measure_module` | `measure-module --module <id> [--width W --height H]` |
-| `run_template` | `run-template --shape lut\|arith\|halo\|launch --n <n> [--width W --height H]` |
-| `exam_predict` | `exam-predict --catalog <file> --item <id> --features <json\|@file>` |
-| `exam_score` | `exam-score --catalog <file> --exam <id> --record <file> --metric <id>` |
-| `min_ledger` | `min-ledger --catalog <file>` |
-| `estimate_cost` | `estimate-wall` 或 `estimate` |
-| `anchor_check` | `anchor` 或 `check` |
-
-写操作在 eval 会话里直接跳过，不跑探针，也不写单价。
+| `ledger_discover_platform` | `discover` |
+| `ledger_run_probe` | `run-probe --backend <id>` |
+| `ledger_commit_prices` | `commit-prices --record <file> --platform <id>` |
+| `ledger_plan_split` | `plan-split --src <dir> --out <file>` |
+| `ledger_scan_iop` | `scan-iop --src <dir>` |
+| `ledger_annotate_features` | `annotate-features --catalog <file> --kernels <dir>` |
+| `ledger_freeze_tests` | `freeze-tests --catalog <file>` |
+| `ledger_score` | `score --catalog <file>` |
+| `ledger_measure_module` | `measure-module --module <id> [--width W --height H]` |
+| `ledger_run_template` | `run-template --shape lut\|arith\|halo\|launch --n <n> [--width W --height H]` |
+| `ledger_exam_predict` | `exam-predict --catalog <file> --item <id> --features <json\|@file>` |
+| `ledger_exam_score` | `exam-score --catalog <file> --exam <id> --record <file> --metric <id>` |
+| `ledger_min_ledger` | `min-ledger --catalog <file>` |
+| `ledger_estimate_cost` | `estimate-wall` |
+| `ledger_anchor_check` | `anchor` |
 
 ## 考试：入学考与毕业考
 
@@ -90,7 +89,7 @@ agent 工具和命令的对应关系：
 | `catalog/gallery.json` | 9/10。`grade_arith30_2560` 是实例级 codegen 运气（n=30 比 n=20 快 8%，三个 session 复测证实），按终态指名挂账 | chain_k3 封 5.605 实测 5.635，0.995 pass；blur_h8 越界封盘带 `range_note`，0.51 fail——警告先发，失败如约 |
 | `catalog/libre-dt-lab.json` / `catalog/darktable.json` | fail。按约定这两个仓库不耕种覆盖率，报告里的缺口就是处方 | 未进行 |
 
-已知限制（详见 `bot/skills/ledger-rules.md`）：实例级 codegen 运气约 ±10%，确认反直觉测量要先跨 session 复测；特征提取器的算子字母表不含 `sqrt`，同一目录内自洽，不跨提取器比原始计数。
+已知限制（详见 `.opencode/skills/ledger-rules/SKILL.md`）：实例级 codegen 运气约 ±10%，确认反直觉测量要先跨 session 复测；特征提取器的算子字母表不含 `sqrt`，同一目录内自洽，不跨提取器比原始计数。
 
 ## 一台新机器
 

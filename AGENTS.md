@@ -9,7 +9,7 @@ measurement, fit, and verdict.
 - `.opencode/agents/perf-ledger.md` — the primary agent. Its body is the
   campaign loop. Permissions: skills and reads allowed, shell asks, edits
   denied (the ledger CLI writes files itself).
-- `.opencode/plugins/perf-ledger.js` — one plugin, namespace `ledger`, 15
+- `.opencode/plugins/perf-ledger.js` — one plugin, namespace `ledger`, 17
   tools. Each tool spawns `node expert/cli.js <args>` with the project root
   as cwd and returns the CLI's JSON stdout as `content`.
 - `.opencode/skills/campaign/SKILL.md` — the goal, the coverage bar, the
@@ -43,6 +43,10 @@ measurement, fit, and verdict.
 5. The plugin resolves the project root from `ctx.location.project` and
    falls back to its own path; every CLI call must run with the project
    root as cwd, because catalog and record paths are root-relative.
+6. Records are never deleted. Write-time dedup blocks redundant writes
+   (`--force true` overrides); `bump-sha` moves a catalog's source sha
+   forward and stale records fail as `stale_record` while staying
+   queryable; `doctor` is the periodic read-only health check.
 
 ## Verifying changes
 

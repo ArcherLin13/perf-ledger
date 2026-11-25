@@ -317,6 +317,27 @@ function loadMetric(entry) {
   return metric;
 }
 
+// A record measured under a different source sha than the catalog's current
+// sha is stale: it stays on disk and stays queryable, but it no longer
+// certifies the current source. Records without a catalog_sha stamp predate
+// stamping and are treated as current.
+function staleRecordOf(entry, catalogSha) {
+  if (!catalogSha || !entry.record) return null;
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.resolve(entry.record), "utf8"));
+    if (doc.catalog_sha && doc.catalog_sha !== catalogSha) {
+      return { id: entry.id, record: entry.record, record_sha: doc.catalog_sha, catalog_sha: catalogSha };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function staleRecordsOf(checked, catalogSha) {
+  return checked.map((entry) => staleRecordOf(entry, catalogSha)).filter(Boolean);
+}
+
 function toRow(entry, metric) {
   return {
     id: entry.id,
@@ -517,7 +538,9 @@ function cmdMinLedger(opts, deps) {
   const { catalog, catalogPath, scanned, checked } = loadCheckedCatalog(opts.catalog);
   const testEntries = checked.filter((entry) => entry.role === "test");
   const refusedEntries = checked.filter((entry) => entry.role === "refuse");
-  const trainRows = trainRowsOf(checked);
+  const staleRecords = staleRecordsOf(checked, catalog.sha);
+  const staleIds = new Set(staleRecords.map((item) => item.id));
+  const trainRows = trainRowsOf(checked.filter((entry) => !staleIds.has(entry.id)));
   const testRows = testRowsOf(testEntries);
 
   const { formulaSearch, chosen, minimum, minimumFit, tied } = fitMinimumFormula(trainRows, deps);
@@ -570,6 +593,7 @@ function cmdMinLedger(opts, deps) {
   const body = {
     catalog: path.resolve(opts.catalog).replace(/\\/g, "/"),
     catalog_sha: catalog.sha ?? null,
+    stale_records: staleRecords,
     scanned_files: scanned.files,
     scan_by_decision: scanned.by_decision,
     scan_by_reason: scanned.by_reason,
@@ -735,6 +759,8 @@ function cmdScore(opts, deps) {
     failures.push({ reason: "catalog_not_frozen", fix: "run freeze-tests; the frozen test set is the exam" });
   }
   const account = claimAccounting(scanned, checked);
+  const staleRecords = staleRecordsOf(checked, catalog.sha);
+  const staleIds = new Set(staleRecords.map((item) => item.id));
   const minCoverage = freeze ? freeze.min_coverage : 0.8;
   if (account.coverage < minCoverage) {
     failures.push({
@@ -746,7 +772,7 @@ function cmdScore(opts, deps) {
   }
   let fit = null;
   try {
-    fit = fitMinimumFormula(trainRowsOf(checked), deps);
+    fit = fitMinimumFormula(trainRowsOf(checked.filter((entry) => !staleIds.has(entry.id))), deps);
   } catch (error) {
     failures.push({ reason: "train_fit_failed", detail: error.message });
   }
@@ -768,6 +794,18 @@ function cmdScore(opts, deps) {
   const testRows = testRowsOf(testEntries);
   const tests = testRows.map((row) => {
     const report = fit ? predictMs(row, fit.chosen.features, fit.chosen.coefficients) : null;
+    if (staleIds.has(row.id)) {
+      return {
+        id: row.id,
+        status: "stale",
+        record: row.record,
+        report_ms: report,
+        measured_ms: row.ms,
+        accuracy: null,
+        passes_85: false,
+        fail: "stale_record",
+      };
+    }
     if (row.status !== "accepted") {
       return {
         id: row.id,
@@ -812,6 +850,14 @@ function cmdScore(opts, deps) {
     failures.push({ reason: "accuracy_below_85", ids: inaccurate.map((item) => item.id) });
   }
   if (!tests.length) failures.push({ reason: "no_tests" });
+  const staleTests = tests.filter((item) => item.fail === "stale_record");
+  if (staleTests.length) {
+    failures.push({
+      reason: "stale_record",
+      ids: staleTests.map((item) => item.id),
+      fix: "re-measure under the current catalog sha; stale records stay on disk and queryable",
+    });
+  }
   const body = {
     catalog: catalogPath.replace(/\\/g, "/"),
     catalog_sha: catalog.sha ?? null,
@@ -819,6 +865,7 @@ function cmdScore(opts, deps) {
     frozen: Boolean(freeze),
     freeze_stamp: freeze ? freeze.stamp : null,
     post_freeze_tests: postFreezeTests,
+    stale_records: staleRecords,
     line: "accuracy = 1 - |measured_ms - report_ms| / measured_ms, pass >= 0.85 per claimed test",
     formula: fit ? `base_ms${fit.chosen.features.map((name) => ` + ${name}_ms * ${name}`).join("")}` : null,
     coefficients,
@@ -960,7 +1007,9 @@ function loadFeatures(opts) {
 function cmdExamPredict(opts, deps) {
   if (!opts.catalog) throw new Error("missing --catalog");
   const { catalog, checked } = loadCheckedCatalog(opts.catalog);
-  const trainRows = trainRowsOf(checked);
+  const staleRecords = staleRecordsOf(checked, catalog.sha);
+  const staleIds = new Set(staleRecords.map((item) => item.id));
+  const trainRows = trainRowsOf(checked.filter((entry) => !staleIds.has(entry.id)));
   const fit = fitMinimumFormula(trainRows, deps);
   const row = featuresToRow(loadFeatures(opts), opts.item);
   const db = deps.openDb();
@@ -999,6 +1048,7 @@ function cmdExamPredict(opts, deps) {
     sealed: true,
     catalog: path.resolve(opts.catalog).replace(/\\/g, "/"),
     catalog_sha: catalog.sha ?? null,
+    stale_records: staleRecords,
     item: row.id,
     features: {
       colorspace: row.colorspace,
@@ -1060,6 +1110,39 @@ function cmdExamScore(opts, deps) {
   console.log(JSON.stringify(body, null, 2));
 }
 
+// bump-sha moves the catalog's source fingerprint forward. It is an explicit
+// event: records stamped with the old sha become stale (computed at read
+// time, never deleted), and the audit log keeps both shas.
+function cmdBumpSha(opts, deps) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  if (!opts.sha) throw new Error("missing --sha");
+  const catalogPath = path.resolve(opts.catalog);
+  const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+  let sha = String(opts.sha);
+  if (sha === "auto") {
+    if (!catalog.iop_src) throw new Error("catalog has no iop_src for --sha auto");
+    const { spawnSync } = require("child_process");
+    const ran = spawnSync("git", ["-C", catalog.iop_src, "rev-parse", "HEAD"], { encoding: "utf8" });
+    if (ran.status !== 0) throw new Error(`git rev-parse failed in ${catalog.iop_src}: ${(ran.stderr || "").trim()}`);
+    sha = ran.stdout.trim();
+  }
+  if (!/^[0-9a-f]{7,40}$/i.test(sha)) throw new Error("sha must be a hex string (7-40 chars) or auto");
+  const previous = catalog.sha ?? null;
+  catalog.sha = sha;
+  fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+  const staleAfter = staleRecordsOf(catalog.modules || [], sha);
+  const body = {
+    catalog: catalogPath.replace(/\\/g, "/"),
+    previous_sha: previous,
+    sha,
+    stale_after_bump: staleAfter,
+    note: "stale records stay on disk and stay queryable; re-measure under the new sha to refresh them",
+  };
+  const db = deps.openDb();
+  body.audit_id = deps.audit(db, "bump_sha", null, body);
+  console.log(JSON.stringify(body, null, 2));
+}
+
 module.exports = {
   cmdScanIop,
   cmdMinLedger,
@@ -1068,6 +1151,7 @@ module.exports = {
   cmdScore,
   cmdExamPredict,
   cmdExamScore,
+  cmdBumpSha,
   scanIop,
   classifyFile,
   lookupWideFor,

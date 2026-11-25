@@ -145,6 +145,8 @@ export default Plugin.define({
             kernels: str("Kernel source directory (default fixtures/tiny/kernels)."),
             width: int("Image width in pixels."),
             height: int("Image height in pixels."),
+            catalog: str("Catalog the measurement certifies; stamps the record with its sha and enables dedup."),
+            force: { type: "boolean", description: "Write even when an equivalent accepted record exists (cross-session validation)." },
           },
           args: (v) =>
             [
@@ -154,6 +156,8 @@ export default Plugin.define({
               v.kernels ? ["--kernels", v.kernels] : [],
               v.width !== undefined ? ["--width", String(v.width)] : [],
               v.height !== undefined ? ["--height", String(v.height)] : [],
+              v.catalog ? ["--catalog", v.catalog] : [],
+              v.force ? ["--force", "true"] : [],
             ].flat(),
         }),
         ledgerTool({
@@ -164,6 +168,8 @@ export default Plugin.define({
             n: int("Repetition count, for example 20."),
             width: int("Image width in pixels."),
             height: int("Image height in pixels."),
+            catalog: str("Catalog the measurement certifies; stamps the record with its sha and enables dedup."),
+            force: { type: "boolean", description: "Write even when an equivalent accepted record exists (cross-session validation)." },
           },
           args: (v) =>
             [
@@ -174,6 +180,8 @@ export default Plugin.define({
               String(v.n),
               v.width !== undefined ? ["--width", String(v.width)] : [],
               v.height !== undefined ? ["--height", String(v.height)] : [],
+              v.catalog ? ["--catalog", v.catalog] : [],
+              v.force ? ["--force", "true"] : [],
             ].flat(),
         }),
         ledgerTool({
@@ -239,6 +247,31 @@ export default Plugin.define({
               String(v.halo ?? 0),
               v.platform ? ["--platform", v.platform] : [],
             ].flat(),
+        }),
+        ledgerTool({
+          name: "doctor",
+          description:
+            "Periodic read-only health check of the experience store: sha drift vs source HEAD, dangling record pointers, stale records, orphan records, duplicates the dedup gate missed, and aging platform probes. Prints a prescription; never changes anything.",
+          input: {
+            catalog: str("Optional single catalog to check (default: every catalog/*.json)."),
+            days: int("Platform probe age threshold in days (default 30)."),
+          },
+          args: (v) =>
+            [
+              "doctor",
+              v.catalog ? ["--catalog", v.catalog] : [],
+              v.days !== undefined ? ["--days", String(v.days)] : [],
+            ].flat(),
+        }),
+        ledgerTool({
+          name: "bump_sha",
+          description:
+            "Move a catalog's source sha forward (explicit event, audited). Records stamped with the old sha become stale: excluded from fits and failed in frozen tests until re-measured, but never deleted.",
+          input: {
+            catalog: catalogProp,
+            sha: str("New source sha (7-40 hex chars) or 'auto' to read HEAD from the catalog's iop_src git repo."),
+          },
+          args: (v) => ["bump-sha", "--catalog", v.catalog, "--sha", v.sha],
         }),
         ledgerTool({
           name: "anchor_check",

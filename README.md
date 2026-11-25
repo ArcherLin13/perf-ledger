@@ -15,7 +15,7 @@ darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/
 | `.opencode/agents/perf-ledger.md` | 主 agent。技能与读操作放行，shell 需确认，编辑拒绝 |
 | `.opencode/skills/campaign/SKILL.md` | 目标与主循环：分类、测量、冻结、评分、毕业考 |
 | `.opencode/skills/ledger-rules/SKILL.md` | 引用数字、拒绝模块、两套时钟、已知限制 |
-| `.opencode/plugins/perf-ledger.js` | 插件，命名空间 `ledger`，15 个工具，内部都是 `node expert/cli.js` |
+| `.opencode/plugins/perf-ledger.js` | 插件，命名空间 `ledger`，17 个工具，内部都是 `node expert/cli.js` |
 | `opencode.jsonc` | `default_agent` 指到 perf-ledger |
 | `expert/cli.js` | 命令行。`expert/package.json` 把这一层标成 CommonJS |
 | `expert/bringup.cjs` | `discover`、`run-probe`、`commit-prices`、`plan-split`、`measure-module`、`run-template` |
@@ -70,6 +70,17 @@ agent 工具和命令的对应关系（工具都在 `ledger` 命名空间下）�
 | `ledger_min_ledger` | `min-ledger --catalog <file>` |
 | `ledger_estimate_cost` | `estimate-wall` |
 | `ledger_anchor_check` | `anchor` |
+| `ledger_doctor` | `doctor [--catalog <file>] [--days N]` |
+| `ledger_bump_sha` | `bump-sha --catalog <file> --sha <sha\|auto>` |
+
+## 记忆管理
+
+经验的防漂移机制，四条：
+
+- **写入查重**：`measure-module`/`run-template` 发现同 probe 集、同指标、同 catalog sha、中位数差 ≤3% 的 accepted 记录时拒绝写盘，返回 `duplicate_of`。跨 session 复测（比如验证实例运气）用 `--force true`。
+- **版本失效**：带 `--catalog` 测量的记录钉上该目录的 sha。`bump-sha` 把目录 sha 往前推之后，旧记录变 stale：拟合排除、冻结考题判 `stale_record`，但文件永留磁盘可查。新 sha 下重测即可刷新。设计来自 Zep 的双时间线：失效不删除。
+- **周期体检**：`doctor` 只读，出处方——sha 漂移、悬空指针、stale、孤儿记录、漏网重复、平台探针超期。仓库或平台可能变过就跑一次。
+- **冷热分层**：热=拟合系数+冻结考题；温=catalog 引用的 accepted 记录；冷=其余全部记录+审计。冷数据只可归档移动，永不删除；审计是账本本身，永不清空。
 
 ## 考试：入学考与毕业考
 

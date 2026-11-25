@@ -1,0 +1,193 @@
+const http = require("http");
+const { DatabaseSync } = require("node:sqlite");
+const path = require("path");
+
+const dbPath = path.join(__dirname, "perfexpert.sqlite");
+
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function ms(value) {
+  if (value === null || value === undefined || value === "") return "";
+  return (Math.round(Number(value) * 1000) / 1000).toString();
+}
+
+function table(headers, rows) {
+  const head = headers.map((header) => `<th>${esc(header.label)}</th>`).join("");
+  const body = rows.length
+    ? rows
+        .map(
+          (row) =>
+            `<tr>${headers
+              .map((header) => `<td>${esc(header.value(row))}</td>`)
+              .join("")}</tr>`
+        )
+        .join("")
+    : `<tr><td colspan="${headers.length}">还没有记录</td></tr>`;
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function page() {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const prices = db.prepare("SELECT * FROM prices ORDER BY platform_id, price_id").all();
+  const modules = db.prepare("SELECT * FROM module_prices ORDER BY id DESC").all();
+  const checks = db.prepare("SELECT * FROM scenario_checks ORDER BY id DESC").all();
+  const shapes = db.prepare("SELECT * FROM shapes ORDER BY id").all();
+  const estimates = db.prepare("SELECT * FROM estimates ORDER BY id DESC").all();
+  const anchors = db.prepare("SELECT * FROM anchors ORDER BY id DESC").all();
+  const audit = db.prepare("SELECT * FROM audit ORDER BY id DESC").all();
+  db.close();
+
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>老师傅数据库</title>
+  <style>
+    body { margin: 24px auto; max-width: 1100px; font: 15px/1.45 system-ui, sans-serif; color: #1c1c1c; }
+    h1 { font-size: 22px; font-weight: 650; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 28px 0 8px; }
+    p { color: #555; margin: 0 0 16px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; vertical-align: top; border-bottom: 1px solid #ddd; padding: 6px 8px; }
+    th { font-size: 12px; color: #555; font-weight: 650; }
+    td { font-variant-numeric: tabular-nums; }
+    code { font-family: ui-monospace, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>老师傅数据库</h1>
+  <p>只读页面，数据来自 expert/perfexpert.sqlite。刷新即可看到新写入的估算和审计。</p>
+  <h2>平台单价 ${prices.length}</h2>
+  ${table(
+    [
+      { label: "平台", value: (row) => row.platform_id },
+      { label: "单价", value: (row) => row.price_id },
+      { label: "数值", value: (row) => row.value },
+      { label: "指标", value: (row) => row.metric },
+      { label: "适用", value: (row) => row.valid_when },
+      { label: "来源", value: (row) => row.source_record },
+    ],
+    prices
+  )}
+  <h2>模块单价 ${modules.length}</h2>
+  ${table(
+    [
+      { label: "id", value: (row) => row.id },
+      { label: "模块", value: (row) => row.module_id },
+      { label: "平台", value: (row) => row.platform_id },
+      { label: "形状", value: (row) => row.shape },
+      { label: "单位", value: (row) => row.unit },
+      { label: "单价", value: (row) => ms(row.value) },
+      { label: "实测 ms", value: (row) => ms(row.measured_ms) },
+      { label: "像素", value: (row) => row.pixels },
+      { label: "遍数", value: (row) => row.passes },
+      { label: "当前有效", value: (row) => (row.active ? "是" : "否") },
+    ],
+    modules
+  )}
+  <h2>场景核对 ${checks.length}</h2>
+  ${table(
+    [
+      { label: "id", value: (row) => row.id },
+      { label: "场景", value: (row) => row.scenario_id },
+      { label: "平台", value: (row) => row.platform_id },
+      { label: "预测 ms", value: (row) => ms(row.predicted_ms) },
+      { label: "实测 ms", value: (row) => ms(row.measured_ms) },
+      { label: "残差", value: (row) => Number(row.residual_ratio).toFixed(3) },
+      { label: "结论", value: (row) => row.verdict },
+    ],
+    checks
+  )}
+  <h2>形状 ${shapes.length}</h2>
+  ${table(
+    [
+      { label: "形状", value: (row) => row.id },
+      { label: "可以计价", value: (row) => (row.can_price ? "是" : "否") },
+      { label: "计数规则", value: (row) => row.counting_rule },
+    ],
+    shapes
+  )}
+  <h2>估算 ${estimates.length}</h2>
+  ${table(
+    [
+      { label: "id", value: (row) => row.id },
+      { label: "时间", value: (row) => row.created_at },
+      { label: "形状", value: (row) => row.shape },
+      { label: "写法", value: (row) => row.access },
+      { label: "尺寸", value: (row) => (row.width ? `${row.width}×${row.height}` : "") },
+      { label: "结论", value: (row) => row.report },
+      { label: "报告 ms", value: (row) => ms(row.report_ms) },
+      { label: "下限 ms", value: (row) => ms(row.lower_bound_ms) },
+      { label: "上限 ms", value: (row) => ms(row.upper_bound_ms) },
+      { label: "公式", value: (row) => row.formula },
+    ],
+    estimates
+  )}
+  <h2>锚点 ${anchors.length}</h2>
+  ${table(
+    [
+      { label: "id", value: (row) => row.id },
+      { label: "估算", value: (row) => row.estimate_id },
+      { label: "实测 ms", value: (row) => ms(row.measured_ms) },
+      { label: "报告 ms", value: (row) => ms(row.report_ms) },
+      { label: "残差", value: (row) => Number(row.residual_ratio).toFixed(3) },
+      { label: "结论", value: (row) => row.verdict },
+      { label: "来源", value: (row) => row.source_record },
+    ],
+    anchors
+  )}
+  <h2>审计 ${audit.length}</h2>
+  ${table(
+    [
+      { label: "id", value: (row) => row.id },
+      { label: "时间", value: (row) => row.created_at },
+      { label: "动作", value: (row) => row.action },
+      { label: "估算", value: (row) => row.estimate_id },
+      { label: "摘要", value: (row) => summarize(row) },
+    ],
+    audit
+  )}
+</body>
+</html>`;
+}
+
+function summarize(row) {
+  const detail = JSON.parse(row.detail);
+  if (row.action === "estimate") {
+    return detail.refused
+      ? `拒绝 ${detail.shape}：${detail.refuse_reason}`
+      : `${detail.shape} ${detail.report} ${detail.report_ms ?? ""}`.trim();
+  }
+  if (row.action === "anchor") return `${detail.verdict} 残差 ${Number(detail.residual_ratio).toFixed(3)}`;
+  if (row.action === "init") return detail.platform_id;
+  return row.action;
+}
+
+function start(port) {
+  const server = http.createServer((req, res) => {
+    if (req.url !== "/" && req.url !== "/index.html") {
+      res.writeHead(404);
+      res.end("not found");
+      return;
+    }
+    try {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(page());
+    } catch (error) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(error.message);
+    }
+  });
+  server.listen(port, "127.0.0.1", () => {
+    console.log(`http://127.0.0.1:${port}`);
+  });
+}
+
+if (require.main === module) start(Number(process.argv[2] || 8765));
+
+module.exports = { start };

@@ -1,0 +1,19 @@
+{
+  "project": "tiny-iop",
+  "iop_src": "D:/WorkStation/perf-ledger/examples/tiny-iop",
+  "measured": false,
+  "modules": [
+    {
+      "id": "gain",
+      "role": "train",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "repeat",
+      "role": "refuse"
+    }
+  ]
+}

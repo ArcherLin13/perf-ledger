@@ -1,0 +1,40 @@
+{
+  "perfmodel": 1,
+  "id": "cpu-unit-prices",
+  "platform": "11th Gen Intel(R) Core(TM) i7-1185G7, one thread, core 0",
+  "fitted_from": "perfbind/records/hardware/2026-11-23-i7-1185g7.json",
+  "status_of_source_metrics": "accepted",
+  "prices": {
+    "sequential_read_dram_GBps": {
+      "value": 19.1,
+      "metric": "read_32768KiB",
+      "when": "The bytes touched do not fit in cache and are read in address order."
+    },
+    "sequential_read_cache_GBps": {
+      "value": 74.8,
+      "metric": "read_32KiB",
+      "when": "The working set fits in about 32 KiB."
+    },
+    "sequential_copy_dram_GBps": {
+      "value": 20.1,
+      "metric": "copy_32768KiB",
+      "when": "A large buffer is read and written sequentially. The rate already counts bytes read plus bytes written."
+    },
+    "sequential_write_dram_GBps": {
+      "value": 13.9,
+      "metric": "write_32768KiB",
+      "when": "A large buffer is stored sequentially and is not reread."
+    }
+  },
+  "formula": {
+    "lower_bound_ms": "(bytes_read + bytes_written) / (sequential_copy_dram_GBps * 1e6)",
+    "read_only_ms": "bytes_read / (sequential_read_dram_GBps * 1e6)"
+  },
+  "unfitted": [
+    "random gather versus sequential",
+    "kernel launch and sync",
+    "FLOP or MAC throughput",
+    "GPU, NPU, ISP",
+    "more than one thread"
+  ]
+}

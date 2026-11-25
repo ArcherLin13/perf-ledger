@@ -1,0 +1,111 @@
+{
+  "project": "darktable",
+  "sha": "20891f6c6fa7be995e5bf9dff9d1ee5062051773",
+  "iop_src": "D:/WorkStation/PerfRepo/upstream/darktable/src/iop",
+  "modules": [
+    {
+      "id": "vibrance",
+      "role": "train",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "width": 2560,
+      "height": 1440,
+      "record": "records/darktable/20891f6c-wall-train.json",
+      "metric_id": "vibrance_2560x1440"
+    },
+    {
+      "id": "exposure",
+      "role": "train",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-train.json",
+      "metric_id": "exposure_1920x1080"
+    },
+    {
+      "id": "sharpen",
+      "role": "train",
+      "colorspace": "lab",
+      "kernels": 3,
+      "halo": 5,
+      "branch_resolved": true,
+      "branch_note": "default radius 2 commits to radius 5, so the copy path is not taken",
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-train.json",
+      "metric_id": "sharpen_1920x1080"
+    },
+    {
+      "id": "soften",
+      "role": "train",
+      "colorspace": "rgb",
+      "kernels": 4,
+      "halo": 62,
+      "branch_resolved": true,
+      "branch_note": "default size 50 at 1920x1080, halo counted from the box filter",
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-train.json",
+      "metric_id": "soften_1920x1080"
+    },
+    {
+      "id": "colorcontrast",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-test.json",
+      "metric_id": "colorcontrast_1920x1080"
+    },
+    {
+      "id": "splittoning",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-test-splittoning-run2.json",
+      "metric_id": "splittoning_1920x1080"
+    },
+    {
+      "id": "highpass",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 4,
+      "halo": 47,
+      "branch_resolved": true,
+      "branch_note": "default sharpness 50, four kernels and halo 47",
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-wall-test.json",
+      "metric_id": "highpass_1920x1080"
+    },
+    {
+      "id": "sigmoid",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": true,
+      "branch_note": "default per-channel path runs one kernel",
+      "width": 1920,
+      "height": 1080,
+      "record": "records/darktable/20891f6c-module-sigmoid.json",
+      "metric_id": "sigmoid"
+    },
+    {
+      "id": "colisa",
+      "role": "refuse"
+    },
+    {
+      "id": "bloom",
+      "role": "refuse"
+    }
+  ]
+}

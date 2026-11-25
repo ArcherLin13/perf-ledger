@@ -1,0 +1,8 @@
+[
+  { "id": "sequential", "can_price": 1, "counting_rule": "Read the input once and write the output once, in address order." },
+  { "id": "stencil", "can_price": 1, "counting_rule": "Streaming: one input read and one output write. Naive: (2R+1)^2 input reads and one output write." },
+  { "id": "pyramid", "can_price": 1, "counting_rule": "Sum a sequential pass at each level. Level n has floor(width/2^n) by floor(height/2^n)." },
+  { "id": "reduction", "can_price": 1, "counting_rule": "Read the input once. The output is a handful of scalars." },
+  { "id": "random", "can_price": 0, "counting_rule": "Indexes do not follow pixel order. No unit price." },
+  { "id": "launch", "can_price": 0, "counting_rule": "Cost is the number of kernel launches. No unit price." }
+]

@@ -1,0 +1,24 @@
+{
+  "perfbind": 1,
+  "backend": "ascend_aiv",
+  "probe_set": "ascend_aiv",
+  "protocol": {
+    "warmup": 3,
+    "samples": 11,
+    "target_ms": 150,
+    "variance_gate": 0.08
+  },
+  "metrics": [
+    {
+      "id": "ascend_aiv",
+      "kind": "blocked",
+      "what": "aclnn_add.h",
+      "input": "probe did not run",
+      "unit": "GB/s",
+      "median": null,
+      "stdev": null,
+      "status": "blocked",
+      "samples": []
+    }
+  ]
+}

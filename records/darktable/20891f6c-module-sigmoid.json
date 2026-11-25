@@ -1,0 +1,55 @@
+{
+  "perfbind": 1,
+  "project": {
+    "name": "darktable",
+    "git_sha": "20891f6c6fa7be995e5bf9dff9d1ee5062051773",
+    "dirty": false
+  },
+  "hardware": {
+    "cpu": "11th Gen Intel(R) Core(TM) i7-1185G7 @ 3.00GHz",
+    "os": "Microsoft Windows 11 Pro",
+    "gpu": "Intel(R) Iris(R) Xe Graphics"
+  },
+  "toolchain": {
+    "compiler": "darktable 5.6.2 windows build",
+    "flags": "--core -d perf"
+  },
+  "command": "darktable-cli experiments/darktable_1080p/input.ppm experiments/darktable_1080p/xmp/sigmoid.xmp experiments/darktable_1080p/out-sigmoid.ppm --width 1920 --height 1080 --core -d perf",
+  "protocol": {
+    "clock": "darktable dev_pixelpipe module line",
+    "runs": 14,
+    "warmup_samples": 3,
+    "samples": 11,
+    "variance_gate": "stdev/median > 0.08 => rejected_variance"
+  },
+  "metrics": [
+    {
+      "id": "sigmoid",
+      "what": "one of the two log-logistic kernels, default is per channel",
+      "input": "1920x1080 float pipe, darktable-cli -d perf module time",
+      "unit": "ms",
+      "estimate_id": 11,
+      "report": "lower",
+      "report_ms": 1.33,
+      "samples": [
+        10,
+        11,
+        12,
+        10,
+        11,
+        11,
+        12,
+        10,
+        11,
+        10,
+        10
+      ],
+      "median": 11,
+      "min": 10,
+      "max": 12,
+      "stdev": 0.7862453931068966,
+      "stdev_over_median": 0.07147685391880877,
+      "status": "accepted"
+    }
+  ]
+}

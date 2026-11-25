@@ -1,0 +1,387 @@
+{
+  "project": "iop",
+  "iop_src": "D:/WorkStation/PerfRepo/upstream/darktable/src/iop",
+  "measured": false,
+  "modules": [
+    {
+      "id": "colorchecker",
+      "role": "train",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "agx",
+      "role": "train",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "channelmixer",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "channelmixerrgb",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "colorbalancergb",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "colorcontrast",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "colorcorrection",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "colorize",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "exposure",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "flip",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "graduatednd",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "negadoctor",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "overexposed",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "primaries",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "relight",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "shadhi",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "splittoning",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "vibrance",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "vignette",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "zonesystem",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false
+    },
+    {
+      "id": "ashift_lsd",
+      "role": "refuse"
+    },
+    {
+      "id": "ashift_nmsimplex",
+      "role": "refuse"
+    },
+    {
+      "id": "atrous",
+      "role": "refuse"
+    },
+    {
+      "id": "basecurve",
+      "role": "refuse"
+    },
+    {
+      "id": "basicadj",
+      "role": "refuse"
+    },
+    {
+      "id": "bilat",
+      "role": "refuse"
+    },
+    {
+      "id": "bloom",
+      "role": "refuse"
+    },
+    {
+      "id": "cacorrect",
+      "role": "refuse"
+    },
+    {
+      "id": "cacorrectrgb",
+      "role": "refuse"
+    },
+    {
+      "id": "censorize",
+      "role": "refuse"
+    },
+    {
+      "id": "clahe",
+      "role": "refuse"
+    },
+    {
+      "id": "colisa",
+      "role": "refuse"
+    },
+    {
+      "id": "colorharmonizer",
+      "role": "refuse"
+    },
+    {
+      "id": "colorin",
+      "role": "refuse"
+    },
+    {
+      "id": "colorout",
+      "role": "refuse"
+    },
+    {
+      "id": "colorreconstruction",
+      "role": "refuse"
+    },
+    {
+      "id": "colortransfer",
+      "role": "refuse"
+    },
+    {
+      "id": "colorzones",
+      "role": "refuse"
+    },
+    {
+      "id": "crop",
+      "role": "refuse"
+    },
+    {
+      "id": "defringe",
+      "role": "refuse"
+    },
+    {
+      "id": "demosaic",
+      "role": "refuse"
+    },
+    {
+      "id": "denoiseprofile",
+      "role": "refuse"
+    },
+    {
+      "id": "dither",
+      "role": "refuse"
+    },
+    {
+      "id": "enlargecanvas",
+      "role": "refuse"
+    },
+    {
+      "id": "equalizer",
+      "role": "refuse"
+    },
+    {
+      "id": "filmic",
+      "role": "refuse"
+    },
+    {
+      "id": "filmicrgb",
+      "role": "refuse"
+    },
+    {
+      "id": "finalscale",
+      "role": "refuse"
+    },
+    {
+      "id": "gamma",
+      "role": "refuse"
+    },
+    {
+      "id": "grain",
+      "role": "refuse"
+    },
+    {
+      "id": "hazeremoval",
+      "role": "refuse"
+    },
+    {
+      "id": "highlights",
+      "role": "refuse"
+    },
+    {
+      "id": "hotpixels",
+      "role": "refuse"
+    },
+    {
+      "id": "invert",
+      "role": "refuse"
+    },
+    {
+      "id": "levels",
+      "role": "refuse"
+    },
+    {
+      "id": "liquify",
+      "role": "refuse"
+    },
+    {
+      "id": "lowlight",
+      "role": "refuse"
+    },
+    {
+      "id": "lowpass",
+      "role": "refuse"
+    },
+    {
+      "id": "mask_manager",
+      "role": "refuse"
+    },
+    {
+      "id": "nlmeans",
+      "role": "refuse"
+    },
+    {
+      "id": "profile_gamma",
+      "role": "refuse"
+    },
+    {
+      "id": "rasterfile",
+      "role": "refuse"
+    },
+    {
+      "id": "rawdenoise",
+      "role": "refuse"
+    },
+    {
+      "id": "rawoverexposed",
+      "role": "refuse"
+    },
+    {
+      "id": "rawprepare",
+      "role": "refuse"
+    },
+    {
+      "id": "rgbcurve",
+      "role": "refuse"
+    },
+    {
+      "id": "rgblevels",
+      "role": "refuse"
+    },
+    {
+      "id": "rotatepixels",
+      "role": "refuse"
+    },
+    {
+      "id": "scalepixels",
+      "role": "refuse"
+    },
+    {
+      "id": "spots",
+      "role": "refuse"
+    },
+    {
+      "id": "temperature",
+      "role": "refuse"
+    },
+    {
+      "id": "tonecurve",
+      "role": "refuse"
+    },
+    {
+      "id": "toneequal",
+      "role": "refuse"
+    },
+    {
+      "id": "useless",
+      "role": "refuse"
+    },
+    {
+      "id": "watermark",
+      "role": "refuse"
+    }
+  ]
+}

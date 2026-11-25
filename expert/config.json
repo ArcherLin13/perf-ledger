@@ -1,0 +1,6 @@
+{
+  "platform_id": "i7-1185g7-1thread",
+  "threads": 1,
+  "prices": "prices.json",
+  "shapes": "shapes.json"
+}

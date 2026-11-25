@@ -259,16 +259,44 @@ ${panels}
 </html>`;
 }
 
+function shortRef(detail) {
+  const base = detail.catalog ? String(detail.catalog).split("/").pop() : null;
+  const sha = detail.catalog_sha ? String(detail.catalog_sha).slice(0, 8) : null;
+  if (base && sha) return `${base}@${sha}`;
+  if (base) return base;
+  if (sha) return `@${sha}`;
+  return "";
+}
+
 function summarize(row) {
   const detail = JSON.parse(row.detail);
+  const ref = shortRef(detail);
+  const at = ref ? `${ref} ` : "";
   if (row.action === "estimate") {
-    return detail.refused
+    const text = detail.refused
       ? `拒绝 ${detail.shape}：${detail.refuse_reason}`
       : `${detail.shape} ${detail.report} ${detail.report_ms ?? ""}`.trim();
+    return at + text;
   }
-  if (row.action === "anchor") return `${detail.verdict} 残差 ${Number(detail.residual_ratio).toFixed(3)}`;
+  if (row.action === "anchor") return `${at}${detail.verdict} 残差 ${Number(detail.residual_ratio).toFixed(3)}`;
   if (row.action === "init") return detail.platform_id;
-  return row.action;
+  if (row.action === "freeze_tests") {
+    return detail.frozen
+      ? `${at}冻结 ${detail.freeze.test_ids.length} 题`
+      : `${at}拒冻（缺口未补齐）`;
+  }
+  if (row.action === "score") {
+    return `${at}${detail.verdict} 实测 ${detail.measured_n}/${detail.test_n}`;
+  }
+  if (row.action === "exam_predict") {
+    return detail.sealed
+      ? `${at}封 ${detail.item} ${ms(detail.report_ms)}ms`
+      : `${at}拒封 ${detail.item}（${detail.reason}）`;
+  }
+  if (row.action === "exam_score") {
+    return `${at}${detail.item} ${detail.verdict} 准确率 ${Number(detail.accuracy).toFixed(3)}`;
+  }
+  return at + row.action;
 }
 
 function start(port) {

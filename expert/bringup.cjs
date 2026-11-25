@@ -445,7 +445,25 @@ function planSplit(opts) {
       train.push(any);
     }
   }
-  const test = priceable.filter((item) => !used.has(item.id));
+  // The exam is a sample, not the repo. Per shape cell, two test entries
+  // with different planned sizes give breadth and depth. Everything else
+  // priceable joins the claim from source classification alone; claimed
+  // modules are not exam items and need no measurement.
+  const rest = priceable.filter((item) => !used.has(item.id));
+  const cells = new Map();
+  for (const item of rest) {
+    const key = `${item.colorspace}|k${item.kernels}|h${item.halo || 0}`;
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(item);
+  }
+  const test = [];
+  const claimed = [];
+  for (const key of [...cells.keys()].sort()) {
+    const members = cells.get(key).sort((a, b) => a.id.localeCompare(b.id));
+    if (members[0]) test.push({ ...members[0], width: 1920, height: 1080 });
+    if (members[1]) test.push({ ...members[1], width: 2560, height: 1440 });
+    for (const extra of members.slice(2)) claimed.push(extra);
+  }
   const catalog = {
     project: path.basename(path.resolve(opts.src)),
     iop_src: path.resolve(opts.src).replace(/\\/g, "/"),
@@ -466,6 +484,16 @@ function planSplit(opts) {
         kernels: item.kernels,
         halo: item.halo,
         branch_resolved: false,
+        width: item.width,
+        height: item.height,
+      })),
+      ...claimed.map((item) => ({
+        id: item.id,
+        role: "claimed",
+        colorspace: item.colorspace,
+        kernels: item.kernels,
+        halo: item.halo,
+        branch_resolved: false,
       })),
       ...refused.map((item) => ({ id: item.id, role: "refuse" })),
     ],
@@ -477,10 +505,14 @@ function planSplit(opts) {
     catalog: out.replace(/\\/g, "/"),
     minimum_measurements: train.length,
     train: train.map((item) => item.id),
-    test: test.map((item) => item.id),
-    needs_branch: needs.map((item) => item.id),
+    test: test.map((item) => ({ id: item.id, planned_size: `${item.width}x${item.height}` })),
+    claimed: claimed.map((item) => item.id),
+    claimed_note: "claimed modules are in the claim from source classification; they are not exam items and need no measurement",
+    needs_branch: needs.map((item) => ({ id: item.id, branch_digest: item.branch_digest || [] })),
     refused: refused.length,
     missing_columns: missing,
+    exam_budget_runs: train.length + test.length,
+    exam_budget_note: "one measure-module run per train and test entry; freeze-tests then judges breadth, depth, and coverage",
     records_written: false,
     prices_written: false,
   };
@@ -503,4 +535,103 @@ function cmdPlanSplit(opts) {
   console.log(JSON.stringify(planSplit(opts), null, 2));
 }
 
-module.exports = { cmdDiscover, cmdRunProbe, cmdCommitPrices, cmdPlanSplit, discoverBackends, commitPrices, planSplit };
+function cmdMeasureModule(opts) {
+  if (!opts.module) throw new Error("missing --module");
+  const kernels = opts.kernels || "D:/WorkStation/samples/libre-dt-lab/data/kernels";
+  const width = opts.width === undefined ? 1920 : Number(opts.width);
+  const height = opts.height === undefined ? 1080 : Number(opts.height);
+  if (!(Number.isInteger(width) && width > 0)) throw new Error("width must be a positive integer");
+  if (!(Number.isInteger(height) && height > 0)) throw new Error("height must be a positive integer");
+  const exe = path.join(probeDir, "build", process.platform === "win32" ? "module_pipe.exe" : "module_pipe");
+  if (!exists(exe)) throw new Error(`missing ${exe}`);
+  const ran = spawnSync(exe, [opts.module, kernels, String(width), String(height)], { encoding: "utf8" });
+  const text = (ran.stdout || "").trim();
+  if (ran.status !== 0) {
+    return blockedRecord(opts.module, text || "measure_failed");
+  }
+  const parsed = JSON.parse(text);
+  const stats = summarize(parsed.samples);
+  const metric = { ...parsed, ...stats, clock: "process_cl" };
+  const file = writeRecord(opts.module, {
+    perfbind: 1,
+    backend: "opencl",
+    probe_set: "module_process_cl",
+    project: "libre-dt-lab",
+    protocol: {
+      warmup_windows: 3,
+      samples: 11,
+      window: "at least 8 launches and 80 ms",
+      variance_gate: "stdev/median > 0.08 => rejected_variance",
+      clock: `one process_cl launch, clFinish, ${width}x${height}`,
+    },
+    metrics: [metric],
+  });
+  return {
+    ok: stats.status === "accepted",
+    record: file.replace(/\\/g, "/"),
+    prices_written: false,
+    metric: {
+      id: metric.id,
+      status: metric.status,
+      median: metric.median,
+      stdev_over_median: metric.stdev_over_median,
+    },
+  };
+}
+
+function cmdRunTemplate(opts) {
+  if (!opts.shape) throw new Error("missing --shape");
+  const n = opts.n === undefined ? NaN : Number(opts.n);
+  if (!(Number.isInteger(n) && n >= 1)) throw new Error("n must be a positive integer");
+  const width = opts.width === undefined ? 1920 : Number(opts.width);
+  const height = opts.height === undefined ? 1080 : Number(opts.height);
+  if (!(Number.isInteger(width) && width > 0)) throw new Error("width must be a positive integer");
+  if (!(Number.isInteger(height) && height > 0)) throw new Error("height must be a positive integer");
+  const exe = path.join(probeDir, "build", process.platform === "win32" ? "template_pipe.exe" : "template_pipe");
+  if (!exists(exe)) throw new Error(`missing ${exe}`);
+  const ran = spawnSync(exe, [opts.shape, String(n), String(width), String(height)], { encoding: "utf8" });
+  const text = (ran.stdout || "").trim();
+  if (ran.status !== 0) {
+    return blockedRecord(`${opts.shape}_${n}`, text || "measure_failed");
+  }
+  const parsed = JSON.parse(text);
+  const stats = summarize(parsed.samples);
+  const metric = { ...parsed, ...stats, clock: "template" };
+  const file = writeRecord(`${opts.shape}_${n}`, {
+    perfbind: 1,
+    backend: "opencl",
+    probe_set: "shape_template",
+    project: "template",
+    protocol: {
+      warmup_windows: 3,
+      samples: 11,
+      window: "at least 8 launches and 80 ms",
+      variance_gate: "stdev/median > 0.08 => rejected_variance",
+      clock: `template ${opts.shape} n=${n}, clFinish, ${width}x${height}`,
+    },
+    metrics: [metric],
+  });
+  return {
+    ok: stats.status === "accepted",
+    record: file.replace(/\\/g, "/"),
+    prices_written: false,
+    metric: {
+      id: metric.id,
+      status: metric.status,
+      median: metric.median,
+      stdev_over_median: metric.stdev_over_median,
+    },
+  };
+}
+
+module.exports = {
+  cmdDiscover,
+  cmdRunProbe,
+  cmdCommitPrices,
+  cmdPlanSplit,
+  cmdMeasureModule,
+  cmdRunTemplate,
+  discoverBackends,
+  commitPrices,
+  planSplit,
+};

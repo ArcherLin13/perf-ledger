@@ -2,6 +2,8 @@
 
 这个目录是性能账本和调用它的 agent。扫描、探针、单价、估价、核对都在 `expert/cli.js`。agent 只引用工具打印的 JSON，不自己重算毫秒或 GB/s。
 
+目标不是调熟某一个仓库，而是把平台经验攒成一个"老师傅"：仓库是训练场，冻结测试集是入学考，没见过的新功能是毕业考——先封盘预测再测量，准确率 0.85 达标。机制全文在 `bot/skills/campaign.md`，引用规则在 `bot/skills/ledger-rules.md`。
+
 darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/iop`。账本、探针、目录和 agent 都在本目录。
 
 ## 目录
@@ -10,15 +12,22 @@ darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/
 | --- | --- |
 | `bot/agent.ts` | agent。模型是 grok-4.7 |
 | `bot/instructions.md` | agent 每次都要遵守的步骤 |
-| `bot/skills/ledger-rules.md` | 引用数字、拒绝模块、两套时钟的规则 |
+| `bot/skills/campaign.md` | 目标与主循环：分类、测量、冻结、评分、毕业考 |
+| `bot/skills/ledger-rules.md` | 引用数字、拒绝模块、两套时钟、已知限制 |
 | `bot/tools/` | agent 调用的工具，内部都是 `node expert/cli.js` |
 | `expert/cli.js` | 命令行。`expert/package.json` 把这一层标成 CommonJS |
-| `expert/bringup.cjs` | `discover`、`run-probe`、`commit-prices`、`plan-split` |
-| `expert/perfexpert.sqlite` | 单价、模块价、核对记录 |
-| `probes/` | CPU、OpenCL、Ascend NPU、Ascend AIV 的探针源码 |
+| `expert/bringup.cjs` | `discover`、`run-probe`、`commit-prices`、`plan-split`、`measure-module`、`run-template` |
+| `expert/project_ledger.js` | `scan-iop`、`annotate-features`、`freeze-tests`、`score`、`min-ledger`、`exam-predict`、`exam-score` |
+| `expert/perfexpert.sqlite` | 单价、模块价、核对记录、审计（冻结/评分/封盘都在 audit 表） |
+| `probes/` | CPU、OpenCL、Ascend NPU、Ascend AIV 的探针源码，外加 `module_pipe.c`（真模块计时）和 `template_pipe.c`（形状模板实例计时） |
 | `records/hardware/` | 每次探针一个新文件，不覆盖旧文件 |
 | `records/darktable/` | 已测过的 darktable 墙上时间 |
-| `catalog/darktable.json` | 已测完、可以对保留集核对的目录 |
+| `fixtures/template/` | 合成桩仓库：模板实例的入学考+毕业考夹具 |
+| `fixtures/gallery/` | 合成桩仓库：终考用，含 halo/launch 形状和真实源码签名 |
+| `catalog/template.json` | 模板仓库目录。入学考 pass，毕业考 pass（audit 111/112） |
+| `catalog/gallery.json` | 终考目录。入学考 9/10（`grade_arith30_2560` 实例运气，已三 session 证实），毕业考 0.995 pass（audit 126/127） |
+| `catalog/darktable.json` | darktable 目录。按约定保持未耕种状态，`score` 诚实报 fail 和缺口 |
+| `catalog/libre-dt-lab.json` | libre-dt-lab 目录。同上 |
 | `catalog/darktable-unmeasured.json` | 只从源码划出的目录，没有记录，不能拿去核对准确率 |
 | `catalog/tiny.json` | `examples/tiny-iop` 的未测量划分 |
 
@@ -50,11 +59,38 @@ agent 工具和命令的对应关系：
 | `commit_prices` | `commit-prices --record <file> --platform <id>` |
 | `plan_split` | `plan-split --src <dir> --out <file>` |
 | `scan_iop` | `scan-iop --src <dir>` |
+| `annotate_features` | `annotate-features --catalog <file> --kernels <dir>` |
+| `freeze_tests` | `freeze-tests --catalog <file>` |
+| `score` | `score --catalog <file>` |
+| `measure_module` | `measure-module --module <id> [--width W --height H]` |
+| `run_template` | `run-template --shape lut\|arith\|halo\|launch --n <n> [--width W --height H]` |
+| `exam_predict` | `exam-predict --catalog <file> --item <id> --features <json\|@file>` |
+| `exam_score` | `exam-score --catalog <file> --exam <id> --record <file> --metric <id>` |
 | `min_ledger` | `min-ledger --catalog <file>` |
 | `estimate_cost` | `estimate-wall` 或 `estimate` |
 | `anchor_check` | `anchor` 或 `check` |
 
 写操作在 eval 会话里直接跳过，不跑探针，也不写单价。
+
+## 考试：入学考与毕业考
+
+仓库是训练场。流程：扫描分类 → `annotate-features` 提取特征 → 测量 → `freeze-tests` 冻结 → `score` 评分。冻结是闸门：广度（每个认领的形状格至少一道考题）、深度（每格至少两个不同声明成本签名，比如尺寸）、覆盖率（可分类热路径的 80% 进认领）缺一不冻，拒冻时给出精确缺口。`score` 是判决：未冻结、覆盖率不足、冻结考题未测量、或任何实测题准确率低于 0.85 都是 fail；未测量的认领考题是失败不是跳过。训练拟合永远不算证据，测过的考题永远不回训练池。
+
+多个最小公式同时拟合训练池且在某个预测上分歧超过 30% 时，`score` 报 `model_ambiguous`——数据分不出谁对，处方是补一条能把混杂列分开的训练测量，不是任选一个。
+
+毕业考针对没见过的新功能（真代码或伪代码）：`exam-predict` 先把预测封进审计（模型歧义时拒绝封盘；特征值越出训练范围时封存自动带 `range_note` 外推警告），再测量一次，`exam-score` 对同一条 0.85 线宣判。封盘不可撤销。失败是诚实判决：报告里的公式和缺口负责指名词汇表缺哪个形状。
+
+形状模板库（`run-template`）是最便宜的经验来源：`lut <条数>`、`arith <算子数>`、`halo <半径>`、`launch <次数>` 四类合成实例，每次只动一列。本机扫掠的两条经验：LUT 条目 64→2048 平坦（表大小不是成本，逐像素表读才是，归 `mb_moved`）；arith 随算子数超线性（特征是 `arith_px_sq`）。
+
+2026-11-25 的考试结果：
+
+| 目录 | 入学考 | 毕业考 |
+| --- | --- | --- |
+| `catalog/template.json` | pass，4/4（0.89–1.00） | arith_75 封 3.390 实测 3.838，0.883 pass；aces20 封 2.22 实测 11.90，0.19 fail（缺逐像素迭代表形状） |
+| `catalog/gallery.json` | 9/10。`grade_arith30_2560` 是实例级 codegen 运气（n=30 比 n=20 快 8%，三个 session 复测证实），按终态指名挂账 | chain_k3 封 5.605 实测 5.635，0.995 pass；blur_h8 越界封盘带 `range_note`，0.51 fail——警告先发，失败如约 |
+| `catalog/libre-dt-lab.json` / `catalog/darktable.json` | fail。按约定这两个仓库不耕种覆盖率，报告里的缺口就是处方 | 未进行 |
+
+已知限制（详见 `bot/skills/ledger-rules.md`）：实例级 codegen 运气约 ±10%，确认反直觉测量要先跨 session 复测；特征提取器的算子字母表不含 `sqrt`，同一目录内自洽，不跨提取器比原始计数。
 
 ## 一台新机器
 
@@ -173,18 +209,9 @@ node expert/cli.js scan-iop --src <模块目录>
 node expert/cli.js plan-split --src <模块目录> --out catalog/<项目>.json
 ```
 
-它只从 `module_wall` 里挑训练行，顺序是：
+它从 `module_wall` 里挑最小训练行，给每个形状格配两道不同计划尺寸的考题（`test`），其余进 `claimed`——只分类、不测量也计入认领。stdout 打印 `exam_budget_runs`（这次考试要跑几次测量）和每个 `needs_branch` 模块的 `branch_digest`（每个 if 的条件和两条分支各发射几个 kernel），分支按摘要裁决，不通读全文。`refuse` 写进目录，角色是 `refuse`。认领是你分类了什么，不是你测量了什么。
 
-1. `base`：LAB，1 个 kernel，halo 0
-2. `rgb`：RGB，1 个 kernel，halo 0
-3. `extra_kernel`：kernel 数大于 1，halo 0
-4. `halo`：halo 大于 0
-
-挑不到的列进 `missing_columns`。`needs_branch` 不进训练，也不进保留。`refuse` 写进目录，角色是 `refuse`。stdout 里的 `minimum_measurements` 是这次能填上的训练行数。它不是准确率，也不能当成“测这么多就超过 85%”。
-
-目录里 `measured` 为 false，训练行没有 `record` 和 `metric_id`。在补上 accepted 记录之前，不要对它跑 `min-ledger`。
-
-darktable 源码这次的划分在 `catalog/darktable-unmeasured.json`：训练是 `colorchecker` 和 `agx`，保留是另外 18 个 `module_wall`，`needs_branch` 有 18 个（含 `sharpen`、`soften`、`highpass`、`sigmoid`、`velvia`），拒绝 55 个，缺的列是 `extra_kernel` 和 `halo`。
+目录里训练行没有 `record` 和 `metric_id`。在补上 accepted 记录之前，不要对它跑 `min-ledger`。划分完先跑 `freeze-tests`，它拒冻时会列出精确缺口（含还差几个认领 `need_additional_claimed`）。
 
 ### 3. 补上分支再测量
 

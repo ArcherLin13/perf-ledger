@@ -1,0 +1,24 @@
+import { defineTool } from "@grok/agent-sdk/tools";
+import * as z from "zod/v4";
+import { runLedger } from "../lib/ledger.js";
+
+export default defineTool({
+  description:
+    "Compile and time one module's OpenCL process_cl at the given size (default 1920x1080). Measure a test entry at its planned size. Writes a new accepted or rejected record. Does not write prices. Modules: colorcontrast, exposure, vibrance, splittoning, aces20, spectral_tone.",
+  inputSchema: z.object({
+    module: z.string().min(1),
+    kernels: z.string().min(1).optional(),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+  }),
+  effect: "write",
+  dryRunResult: ({ module }) => ({ ok: false, skipped: true, reason: "dry-run", module }),
+  async execute({ module, kernels, width, height }, ctx) {
+    if (ctx.session.purpose === "eval") return { ok: false, skipped: true, reason: "eval", module };
+    const args = ["measure-module", "--module", module];
+    if (kernels) args.push("--kernels", kernels);
+    if (width !== undefined) args.push("--width", String(width));
+    if (height !== undefined) args.push("--height", String(height));
+    return runLedger(args);
+  },
+});

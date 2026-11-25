@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "shape_template",
+  "project": "template",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "template lut n=128, clFinish, 1920x1080"
+  },
+  "metrics": [
+    {
+      "id": "lut_128_1920x1080",
+      "shape": "lut",
+      "param": 128,
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "unit": "ms",
+      "samples": [
+        2.130855,
+        2.116329,
+        2.175776,
+        2.101318,
+        2.202981,
+        2.125867,
+        2.064082,
+        2.154163,
+        2.138266,
+        2.152174,
+        2.162039
+      ],
+      "median": 2.138266,
+      "min": 2.064082,
+      "max": 2.202981,
+      "stdev": 0.03763491374460204,
+      "stdev_over_median": 0.01760066976915035,
+      "status": "accepted",
+      "clock": "template"
+    }
+  ]
+}

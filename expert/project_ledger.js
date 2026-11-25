@@ -76,8 +76,69 @@ function loopsContainingEnqueue(body) {
   return count;
 }
 
+function blockSpan(src, i) {
+  if (src[i] === "{") {
+    let depth = 0;
+    const start = i;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") depth += 1;
+      else if (src[i] === "}") {
+        depth -= 1;
+        if (depth === 0) return { text: src.slice(start, i + 1), end: i + 1 };
+      }
+    }
+    return { text: src.slice(start), end: src.length };
+  }
+  const semi = src.indexOf(";", i);
+  const end = semi === -1 ? src.length : semi + 1;
+  return { text: src.slice(i, end), end };
+}
+
+// A branch digest turns "read the whole file" into "read a few lines":
+// each conditional in process_cl with the enqueue count of each side.
+function branchDigest(body) {
+  if (!body) return [];
+  const re = /\bif\s*\(/g;
+  const digest = [];
+  let match;
+  while ((match = re.exec(body))) {
+    let i = match.index + match[0].length - 1;
+    let depth = 0;
+    const condStart = i + 1;
+    for (; i < body.length; i++) {
+      if (body[i] === "(") depth += 1;
+      else if (body[i] === ")") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    const condition = body.slice(condStart, i).replace(/\s+/g, " ").trim().slice(0, 160);
+    i += 1;
+    while (i < body.length && /\s/.test(body[i])) i += 1;
+    const thenBlock = blockSpan(body, i);
+    i = thenBlock.end;
+    let j = i;
+    while (j < body.length && /\s/.test(body[j])) j += 1;
+    let elseEnqueues = null;
+    if (body.slice(j, j + 4) === "else") {
+      j += 4;
+      while (j < body.length && /\s/.test(body[j])) j += 1;
+      const elseBlock = blockSpan(body, j);
+      elseEnqueues = countMatches(elseBlock.text, /dt_opencl_enqueue/g);
+      i = elseBlock.end;
+    }
+    digest.push({
+      condition,
+      then_enqueues: countMatches(thenBlock.text, /dt_opencl_enqueue/g),
+      else_enqueues: elseEnqueues,
+    });
+    re.lastIndex = i;
+  }
+  return digest;
+}
+
 function classifyFile(filePath) {
-  const src = fs.readFileSync(filePath, "utf8");
+  const src = stripComments(fs.readFileSync(filePath, "utf8"));
   const id = path.basename(filePath, ".c");
   const colorsBody = extractFunction(src, "default_colorspace");
   const processBody = extractFunction(src, "process_cl");
@@ -121,6 +182,7 @@ function classifyFile(filePath) {
     scan.reason = "conditional_path";
     scan.kernels = null;
     scan.halo = null;
+    scan.branch_digest = branchDigest(processBody);
   } else {
     scan.decision = "module_wall";
     scan.reason = hostConstant > 0 ? "fixed_launches_plus_small_constant" : "fixed_launches";
@@ -169,7 +231,7 @@ function combinations(items, k) {
 }
 
 function featureSubsets() {
-  const names = ["rgb", "extra_kernel", "halo"];
+  const names = ["rgb", "extra_kernel", "halo", "lookup_wide", "lut_entries", "arith_ops", "pixels", "mb_moved", "arith_px", "arith_px_sq", "halo_px", "halo_px_px"];
   const subsets = [[]];
   for (const name of names) {
     const extra = subsets.map((subset) => [...subset, name]);
@@ -179,7 +241,20 @@ function featureSubsets() {
 }
 
 function rowVector(row, features) {
-  const values = { rgb: row.rgb, extra_kernel: row.extra, halo: row.halo };
+  const values = {
+    rgb: row.rgb,
+    extra_kernel: row.extra,
+    halo: row.halo,
+    lookup_wide: row.lookup_wide,
+    lut_entries: row.lut_entries,
+    arith_ops: row.arith_ops,
+    pixels: row.pixels || 0,
+    mb_moved: row.mb_moved || 0,
+    arith_px: (row.arith_ops || 0) * (row.pixels || 0),
+    arith_px_sq: (row.arith_ops || 0) * (row.arith_ops || 0) * (row.pixels || 0),
+    halo_px: row.halo_px || 0,
+    halo_px_px: (row.halo_px || 0) * (row.pixels || 0),
+  };
   return [1, ...features.map((name) => values[name])];
 }
 
@@ -225,7 +300,12 @@ function scored(rows, features, coefficients) {
 function featuresMatch(metric, entry) {
   if (metric.colorspace !== undefined && metric.colorspace !== entry.colorspace) return false;
   if (metric.kernels !== undefined && metric.kernels !== entry.kernels) return false;
-  if (metric.halo !== undefined && (metric.halo || 0) !== entry.halo) return false;
+  if (metric.halo !== undefined) {
+    // A record's halo certifies a neighborhood width declared either at the
+    // wall level (entry.halo) or inside the kernel (entry.halo_px).
+    const width = metric.halo || 0;
+    if (width !== (entry.halo || 0) && width !== (entry.halo_px || 0)) return false;
+  }
   return true;
 }
 
@@ -246,6 +326,12 @@ function toRow(entry, metric) {
     halo: entry.halo,
     rgb: entry.colorspace === "rgb" ? 1 : 0,
     extra: entry.kernels - 1,
+    lookup_wide: entry.lookup_wide ? 1 : 0,
+    lut_entries: entry.lut_entries || 0,
+    arith_ops: entry.arith_ops || 0,
+    pixels: entry.width && entry.height ? (entry.width * entry.height) / 1e6 : 0,
+    mb_moved: entry.mb_moved || 0,
+    halo_px: entry.halo_px || 0,
     ms: metric ? metric.median : null,
     status: metric ? metric.status : "unmeasured",
     record: entry.record || null,
@@ -270,9 +356,9 @@ function catalogAgrees(scan, entry) {
   return { ok: false, why: scan.decision };
 }
 
-function cmdMinLedger(opts, deps) {
-  if (!opts.catalog) throw new Error("missing --catalog");
-  const catalog = JSON.parse(fs.readFileSync(path.resolve(opts.catalog), "utf8"));
+function loadCheckedCatalog(catalogPath) {
+  const abs = path.resolve(catalogPath);
+  const catalog = JSON.parse(fs.readFileSync(abs, "utf8"));
   const scanned = scanIop(catalog.iop_src);
   const byId = new Map(scanned.modules.map((item) => [item.id, item]));
   const checked = catalog.modules.map((entry) => {
@@ -288,16 +374,22 @@ function cmdMinLedger(opts, deps) {
         .join("; ")}`
     );
   }
-  const trainEntries = checked.filter((entry) => entry.role === "train");
-  const testEntries = checked.filter((entry) => entry.role === "test");
-  const refusedEntries = checked.filter((entry) => entry.role === "refuse");
-  const trainRows = trainEntries.map((entry) => {
-    const metric = loadMetric(entry);
-    if (!metric || metric.status !== "accepted") throw new Error(`${entry.id} train metric is not accepted`);
-    if (!featuresMatch(metric, entry)) throw new Error(`${entry.id} record features differ from the catalog`);
-    return toRow(entry, metric);
-  });
-  const testRows = testEntries.map((entry) => {
+  return { catalog, catalogPath: abs, scanned, checked };
+}
+
+function trainRowsOf(checked) {
+  return checked
+    .filter((entry) => entry.role === "train")
+    .map((entry) => {
+      const metric = loadMetric(entry);
+      if (!metric || metric.status !== "accepted") throw new Error(`${entry.id} train metric is not accepted`);
+      if (!featuresMatch(metric, entry)) throw new Error(`${entry.id} record features differ from the catalog`);
+      return toRow(entry, metric);
+    });
+}
+
+function testRowsOf(testEntries) {
+  return testEntries.map((entry) => {
     const metric = loadMetric(entry);
     if (metric && metric.status === "accepted" && !featuresMatch(metric, entry)) {
       throw new Error(`${entry.id} record features differ from the catalog`);
@@ -306,7 +398,9 @@ function cmdMinLedger(opts, deps) {
     if (metric && metric.status !== "accepted") row.status = metric.status;
     return row;
   });
+}
 
+function fitMinimumFormula(trainRows, deps) {
   const formulaSearch = featureSubsets().map((features) => {
     const fit = fitRows(trainRows, features, deps.solveLinear);
     if (fit.singular) {
@@ -326,14 +420,6 @@ function cmdMinLedger(opts, deps) {
   if (!admissible.length) throw new Error("no formula fits the training pool at 0.85");
   admissible.sort((a, b) => a.columns - b.columns || a.features.join(",").localeCompare(b.features.join(",")));
   const chosen = admissible[0];
-  const smaller = combinations(trainRows, chosen.columns - 1).map((subset) => {
-    const fit = fitRows(subset, chosen.features, deps.solveLinear);
-    return {
-      ids: subset.map((row) => row.id),
-      usable: !fit.singular,
-      reason: fit.singular ? fit.reason || "singular" : "full rank",
-    };
-  });
   const basis = combinations(trainRows, chosen.columns).map((subset) => {
     const fit = fitRows(subset, chosen.features, deps.solveLinear);
     if (fit.singular) return { ids: subset.map((row) => row.id), usable: false };
@@ -353,10 +439,104 @@ function cmdMinLedger(opts, deps) {
     chosen.features,
     deps.solveLinear
   );
+  const tied = admissible.filter((item) => item.columns === chosen.columns);
+  return { formulaSearch, chosen, minimum, minimumFit, tied };
+}
+
+// When several minimal formulas fit the training pool, an alphabetical
+// pick hides that the data cannot tell them apart. Ambiguity is when the
+// tied formulas disagree on a claimed prediction by more than 30% of the
+// midpoint. The fix is a train module where the tied columns differ.
+function modelAmbiguity(tied, rows) {
+  const tiedFeatures = tied.map((item) => item.features);
+  if (tied.length < 2 || !rows.length) {
+    return { ambiguous: false, rows: [], tied_formulas: tiedFeatures, confounded_columns: [] };
+  }
+  const bad = [];
+  for (const row of rows) {
+    const preds = tied.map((item) => predictMs(row, item.features, item.coefficients));
+    const max = Math.max(...preds);
+    const min = Math.min(...preds);
+    const scale = Math.max(Math.abs((max + min) / 2), 1e-9);
+    if ((max - min) / scale > 0.3) bad.push(row.id);
+  }
+  const union = new Set(tiedFeatures.flat());
+  const confounded = [...union].filter((name) => !tiedFeatures.every((features) => features.includes(name))).sort();
+  return { ambiguous: bad.length > 0, rows: bad, tied_formulas: tiedFeatures, confounded_columns: confounded };
+}
+
+function claimedRowsOf(checked) {
+  return checked.filter((entry) => entry.role === "claimed").map((entry) => toRow(entry, null));
+}
+
+function cellKeyOf(entry) {
+  return [entry.colorspace, `k${entry.kernels}`, `h${entry.halo || 0}`, `lw${entry.lookup_wide ? 1 : 0}`].join("|");
+}
+
+function costSignature(entry) {
+  return `${entry.width || "?"}x${entry.height || "?"}`;
+}
+
+function claimAccounting(scanned, checked) {
+  const classifiable = scanned.modules.filter((item) => item.decision === "module_wall" || item.decision === "needs_branch");
+  const unclassifiable = scanned.modules.filter((item) => item.decision === "refuse");
+  const claimedIds = new Set(
+    checked
+      .filter((entry) => entry.role === "train" || entry.role === "test" || entry.role === "claimed")
+      .map((entry) => entry.id)
+  );
+  const uncovered = classifiable
+    .filter((item) => !claimedIds.has(item.id))
+    .map((item) => ({
+      id: item.id,
+      scan_decision: item.decision,
+      reason: item.decision === "needs_branch" ? "branch_not_resolved" : "not_in_catalog",
+    }));
+  return {
+    classifiable: classifiable.length,
+    unclassifiable: unclassifiable.length,
+    claimed: claimedIds.size,
+    coverage: classifiable.length ? claimedIds.size / classifiable.length : 0,
+    uncovered,
+  };
+}
+
+function cellBuckets(checked) {
+  const cells = new Map();
+  for (const entry of checked) {
+    if (entry.role !== "train" && entry.role !== "test" && entry.role !== "claimed") continue;
+    const key = cellKeyOf(entry);
+    if (!cells.has(key)) cells.set(key, { train: [], test: [], claimed: [] });
+    cells.get(key)[entry.role].push(entry);
+  }
+  return [...cells.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function cmdMinLedger(opts, deps) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  const { catalog, catalogPath, scanned, checked } = loadCheckedCatalog(opts.catalog);
+  const testEntries = checked.filter((entry) => entry.role === "test");
+  const refusedEntries = checked.filter((entry) => entry.role === "refuse");
+  const trainRows = trainRowsOf(checked);
+  const testRows = testRowsOf(testEntries);
+
+  const { formulaSearch, chosen, minimum, minimumFit, tied } = fitMinimumFormula(trainRows, deps);
+  const ambiguity = modelAmbiguity(tied, [...testRows, ...claimedRowsOf(checked)]);
+  const smaller = combinations(trainRows, chosen.columns - 1).map((subset) => {
+    const fit = fitRows(subset, chosen.features, deps.solveLinear);
+    return {
+      ids: subset.map((row) => row.id),
+      usable: !fit.singular,
+      reason: fit.singular ? fit.reason || "singular" : "full rank",
+    };
+  });
   const names = ["base_ms", ...chosen.features.map((name) => `${name}_ms`)];
-  const coefficientMap = Object.fromEntries(names.map((name, index) => [name, minimumFit.coefficients[index]]));
+  // The report uses least squares over the whole accepted training pool —
+  // the same coefficients the admissibility gate checked. The minimum basis
+  // stays in the output as proof of the measurement floor.
+  const coefficientMap = Object.fromEntries(names.map((name, index) => [name, chosen.coefficients[index]]));
   const test = testRows.map((row) => {
-    const report = predictMs(row, chosen.features, minimumFit.coefficients);
+    const report = predictMs(row, chosen.features, chosen.coefficients);
     if (row.status !== "accepted") {
       return {
         id: row.id,
@@ -404,7 +584,8 @@ function cmdMinLedger(opts, deps) {
       singular: item.singular,
       passes_train_85: item.passes_train_85,
     })),
-    training: scored(
+    training: scored(trainRows, chosen.features, chosen.coefficients),
+    basis_fit: scored(
       trainRows.filter((row) => minimum.ids.includes(row.id)),
       chosen.features,
       minimumFit.coefficients
@@ -413,6 +594,10 @@ function cmdMinLedger(opts, deps) {
     measured_test_n: measuredTest.length,
     measured_test_passed_85: measuredTest.filter((item) => item.passes_85).length,
     measured_test_all_pass_85: measuredTest.length > 0 && measuredTest.every((item) => item.passes_85),
+    tied_formulas: ambiguity.tied_formulas,
+    model_ambiguous: ambiguity.ambiguous,
+    ambiguous_rows: ambiguity.rows,
+    confounded_columns: ambiguity.confounded_columns,
     refused: refusedEntries.map((entry) => ({ id: entry.id, reason: entry.scan_reason })),
     priceable_not_in_catalog: pricedByScan.map((item) => item.id),
   };
@@ -421,4 +606,461 @@ function cmdMinLedger(opts, deps) {
   console.log(JSON.stringify(body, null, 2));
 }
 
-module.exports = { cmdScanIop, cmdMinLedger, scanIop, classifyFile };
+// freeze-tests judges the test set before any fitting. It refuses to
+// freeze a claim that is narrow, shallow, or covers too little of the
+// repository. A frozen catalog is the exam; score grades against it.
+
+function freezeTests(opts, deps) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  const minCoverage = opts["min-coverage"] === undefined ? 0.8 : Number(opts["min-coverage"]);
+  const minDepth = opts["min-depth"] === undefined ? 2 : Number(opts["min-depth"]);
+  if (!(minCoverage > 0 && minCoverage <= 1)) throw new Error("min-coverage must be in (0, 1]");
+  if (!(Number.isInteger(minDepth) && minDepth >= 1)) throw new Error("min-depth must be an integer >= 1");
+  const { catalog, catalogPath, scanned, checked } = loadCheckedCatalog(opts.catalog);
+  if (catalog.freeze && !(opts.refreeze === true || opts.refreeze === "true")) {
+    throw new Error(`catalog already frozen at ${catalog.freeze.stamp}; pass --refreeze true to replace it`);
+  }
+  const account = claimAccounting(scanned, checked);
+  const testEntries = checked.filter((entry) => entry.role === "test");
+  const cells = cellBuckets(checked).map(([cell, bucket]) => {
+    // Undeclared size ("?") cannot prove depth: it collapses into one
+    // bucket that never counts as a distinct cost signature.
+    const signatures = new Map();
+    const undeclared = [];
+    for (const entry of bucket.test) {
+      const sig = costSignature(entry);
+      if (sig === "?x?") {
+        undeclared.push(entry.id);
+        continue;
+      }
+      if (!signatures.has(sig)) signatures.set(sig, []);
+      signatures.get(sig).push(entry.id);
+    }
+    return {
+      cell,
+      train: bucket.train.map((entry) => entry.id).sort(),
+      test: bucket.test.map((entry) => entry.id).sort(),
+      claimed: bucket.claimed.map((entry) => entry.id).sort(),
+      distinct_cost_signatures: signatures.size,
+      undeclared_signature: undeclared.sort(),
+      signatures: [...signatures.entries()].map(([signature, ids]) => ({ signature, ids: ids.sort() })),
+    };
+  });
+  const breadth = cells
+    .filter((item) => item.test.length === 0)
+    .map((item) => ({
+      cell: item.cell,
+      train: item.train,
+      claimed: item.claimed,
+      gap: "no_test_for_claimed_shape",
+      fix: "add a test module of this shape; measured tests never move into train",
+    }));
+  const depth = cells
+    .filter((item) => item.test.length > 0 && item.distinct_cost_signatures < minDepth)
+    .map((item) => ({
+      cell: item.cell,
+      test: item.test,
+      distinct_cost_signatures: item.distinct_cost_signatures,
+      undeclared_signature: item.undeclared_signature,
+      need: minDepth,
+      gap: "depth_insufficient",
+      fix: "add a test of this shape that differs in size, repetition, or intensity",
+    }));
+  const gaps = {
+    coverage:
+      account.coverage < minCoverage
+        ? {
+            coverage: account.coverage,
+            need: minCoverage,
+            uncovered_n: account.uncovered.length,
+            need_additional_claimed: Math.ceil(minCoverage * account.classifiable) - account.claimed,
+            fix: "resolve needs_branch modules into the claim or add missing module_wall modules to the catalog",
+          }
+        : null,
+    breadth,
+    depth,
+  };
+  const ok = !gaps.coverage && breadth.length === 0 && depth.length === 0;
+  const body = {
+    catalog: catalogPath.replace(/\\/g, "/"),
+    ok,
+    frozen: false,
+    min_coverage: minCoverage,
+    min_depth: minDepth,
+    classifiable: account.classifiable,
+    unclassifiable: account.unclassifiable,
+    claimed: account.claimed,
+    coverage: account.coverage,
+    uncovered: account.uncovered,
+    test_n: testEntries.length,
+    cells,
+    gaps,
+  };
+  if (ok) {
+    const previous = catalog.freeze ? catalog.freeze.stamp : null;
+    catalog.freeze = {
+      stamp: new Date().toISOString(),
+      min_coverage: minCoverage,
+      min_depth: minDepth,
+      classifiable: account.classifiable,
+      claimed: account.claimed,
+      coverage: account.coverage,
+      test_ids: testEntries.map((entry) => entry.id).sort(),
+    };
+    fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+    body.frozen = true;
+    body.previous_freeze = previous;
+    body.freeze = catalog.freeze;
+  }
+  const db = deps.openDb();
+  body.audit_id = deps.audit(db, "freeze_tests", null, body);
+  return body;
+}
+
+function cmdFreezeTests(opts, deps) {
+  console.log(JSON.stringify(freezeTests(opts, deps), null, 2));
+}
+
+// score grades the frozen test set. Every claimed test must be measured
+// and accurate; an unmeasured claimed test is a failure, not a skip.
+
+function cmdScore(opts, deps) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  const { catalog, catalogPath, scanned, checked } = loadCheckedCatalog(opts.catalog);
+  const failures = [];
+  const freeze = catalog.freeze || null;
+  if (!freeze) {
+    failures.push({ reason: "catalog_not_frozen", fix: "run freeze-tests; the frozen test set is the exam" });
+  }
+  const account = claimAccounting(scanned, checked);
+  const minCoverage = freeze ? freeze.min_coverage : 0.8;
+  if (account.coverage < minCoverage) {
+    failures.push({
+      reason: "coverage_below_min",
+      coverage: account.coverage,
+      need: minCoverage,
+      uncovered_n: account.uncovered.length,
+    });
+  }
+  let fit = null;
+  try {
+    fit = fitMinimumFormula(trainRowsOf(checked), deps);
+  } catch (error) {
+    failures.push({ reason: "train_fit_failed", detail: error.message });
+  }
+  let testEntries = checked.filter((entry) => entry.role === "test");
+  let postFreezeTests = [];
+  if (freeze) {
+    const frozenIds = new Set(freeze.test_ids);
+    const missing = freeze.test_ids.filter(
+      (id) => !testEntries.some((entry) => entry.id === id)
+    );
+    if (missing.length) failures.push({ reason: "frozen_test_missing_from_catalog", ids: missing });
+    postFreezeTests = testEntries.filter((entry) => !frozenIds.has(entry.id)).map((entry) => entry.id);
+    testEntries = testEntries.filter((entry) => frozenIds.has(entry.id));
+  }
+  const names = fit ? ["base_ms", ...fit.chosen.features.map((name) => `${name}_ms`)] : null;
+  const coefficients = fit
+    ? Object.fromEntries(names.map((name, index) => [name, fit.chosen.coefficients[index]]))
+    : null;
+  const testRows = testRowsOf(testEntries);
+  const tests = testRows.map((row) => {
+    const report = fit ? predictMs(row, fit.chosen.features, fit.chosen.coefficients) : null;
+    if (row.status !== "accepted") {
+      return {
+        id: row.id,
+        status: row.status,
+        report_ms: report,
+        measured_ms: null,
+        accuracy: null,
+        passes_85: false,
+        fail: "unmeasured_claimed_test",
+      };
+    }
+    const accuracy = 1 - Math.abs(row.ms - report) / row.ms;
+    return {
+      id: row.id,
+      status: "accepted",
+      record: row.record,
+      report_ms: report,
+      measured_ms: row.ms,
+      accuracy,
+      passes_85: accuracy >= 0.85,
+      fail: accuracy >= 0.85 ? null : "accuracy_below_85",
+    };
+  });
+  if (fit) {
+    const ambiguity = modelAmbiguity(fit.tied, [...testRows, ...claimedRowsOf(checked)]);
+    if (ambiguity.ambiguous) {
+      failures.push({
+        reason: "model_ambiguous",
+        rows: ambiguity.rows,
+        tied_formulas: ambiguity.tied_formulas,
+        confounded_columns: ambiguity.confounded_columns,
+        fix: "add a train module where the confounded columns differ; the training pool cannot separate them",
+      });
+    }
+  }
+  const unmeasured = tests.filter((item) => item.fail === "unmeasured_claimed_test");
+  if (unmeasured.length) {
+    failures.push({ reason: "unmeasured_claimed_test", ids: unmeasured.map((item) => item.id) });
+  }
+  const inaccurate = tests.filter((item) => item.fail === "accuracy_below_85");
+  if (inaccurate.length) {
+    failures.push({ reason: "accuracy_below_85", ids: inaccurate.map((item) => item.id) });
+  }
+  if (!tests.length) failures.push({ reason: "no_tests" });
+  const body = {
+    catalog: catalogPath.replace(/\\/g, "/"),
+    verdict: failures.length === 0 ? "pass" : "fail",
+    frozen: Boolean(freeze),
+    freeze_stamp: freeze ? freeze.stamp : null,
+    post_freeze_tests: postFreezeTests,
+    line: "accuracy = 1 - |measured_ms - report_ms| / measured_ms, pass >= 0.85 per claimed test",
+    formula: fit ? `base_ms${fit.chosen.features.map((name) => ` + ${name}_ms * ${name}`).join("")}` : null,
+    coefficients,
+    coverage: account.coverage,
+    classifiable: account.classifiable,
+    claimed: account.claimed,
+    uncovered: account.uncovered,
+    test_n: tests.length,
+    measured_n: tests.filter((item) => item.status === "accepted").length,
+    tests,
+    failures,
+  };
+  const db = deps.openDb();
+  body.audit_id = deps.audit(db, "score", null, body);
+  console.log(JSON.stringify(body, null, 2));
+}
+
+function kernelSlice(src, name) {
+  const re = new RegExp(`(?:__kernel\\s+void|kernel\\s+void)\\s+${name}\\s*\\(`);
+  const match = re.exec(src);
+  if (!match) return null;
+  const brace = src.indexOf("{", match.index);
+  if (brace < 0) return null;
+  let depth = 0;
+  for (let i = brace; i < src.length; i++) {
+    if (src[i] === "{") depth += 1;
+    else if (src[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(match.index, i + 1);
+    }
+  }
+  return null;
+}
+
+const ARITH_RE =
+  /\b(?:pow|powf|exp|exp2|exp10|log|log2|log10|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh)\s*\(/g;
+
+function lutEntries(text) {
+  let max = 0;
+  for (const match of text.matchAll(/\[(\d+)\]/g)) max = Math.max(max, Number(match[1]));
+  for (const match of text.matchAll(/#define\s+\w+\s+(\d+)/g)) max = Math.max(max, Number(match[1]));
+  return max;
+}
+
+function arithOps(text) {
+  return (text.match(ARITH_RE) || []).length;
+}
+
+// Largest constant pixel offset in image reads, e.g. (int2)(x + 2, y - 1).
+// Variable radii stay 0 here; they are declared in the catalog instead.
+function haloPx(text) {
+  let max = 0;
+  for (const m of text.matchAll(/\(int2\)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g)) {
+    for (const off of m[1].matchAll(/\b[xy]\s*[+-]\s*(\d+)/g)) max = Math.max(max, Number(off[1]));
+  }
+  return max;
+}
+
+// Quantitative features from the module's own kernel: table size in
+// entries, transcendental call count, constant neighbor radius.
+function kernelFeaturesFor(kernelDir, id) {
+  const files = fs.readdirSync(kernelDir).filter((name) => name.endsWith(".cl"));
+  for (const file of files) {
+    const src = stripComments(fs.readFileSync(path.join(kernelDir, file), "utf8"));
+    const slice = kernelSlice(src, id) || kernelSlice(src, `kernel_${id}`);
+    if (!slice) continue;
+    const kernels = src.match(/(?:__kernel\s+void|kernel\s+void)\s+\w+\s*\(/g) || [];
+    const unit = kernels.length === 1 ? src : slice;
+    const entries = lutEntries(unit);
+    return {
+      lookup_wide: entries >= 64 ? 1 : 0,
+      lut_entries: entries,
+      arith_ops: arithOps(unit),
+      halo_px: haloPx(unit),
+      kernel_file: file,
+    };
+  }
+  return { lookup_wide: 0, lut_entries: 0, arith_ops: 0, halo_px: 0, kernel_file: null };
+}
+
+function lookupWideFor(kernelDir, id) {
+  const found = kernelFeaturesFor(kernelDir, id);
+  return { lookup_wide: found.lookup_wide, kernel_file: found.kernel_file };
+}
+
+function cmdAnnotateFeatures(opts) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  if (!opts.kernels) throw new Error("missing --kernels");
+  const catalog = JSON.parse(fs.readFileSync(path.resolve(opts.catalog), "utf8"));
+  const annotated = [];
+  for (const entry of catalog.modules) {
+    if (entry.role === "refuse") continue;
+    const found = kernelFeaturesFor(path.resolve(opts.kernels), entry.id);
+    entry.lookup_wide = found.lookup_wide;
+    entry.lut_entries = found.lut_entries;
+    entry.arith_ops = found.arith_ops;
+    entry.halo_px = found.halo_px;
+    annotated.push({ id: entry.id, ...found });
+  }
+  fs.writeFileSync(path.resolve(opts.catalog), JSON.stringify(catalog, null, 2));
+  console.log(JSON.stringify({ catalog: path.resolve(opts.catalog).replace(/\\/g, "/"), modules: annotated }, null, 2));
+}
+
+// The graduation exam: predict a feature vector you have never measured,
+// seal the prediction in the audit trail, and only then check it against
+// a record. A sealed prediction can never be edited after the fact.
+
+function featuresToRow(features, id) {
+  const colorspace = features.colorspace;
+  if (colorspace !== "lab" && colorspace !== "rgb") throw new Error("features.colorspace must be lab or rgb");
+  const kernels = Number(features.kernels ?? 1);
+  if (!(Number.isInteger(kernels) && kernels >= 1)) throw new Error("features.kernels must be an integer >= 1");
+  return {
+    id: id || features.id || "exam_item",
+    colorspace,
+    kernels,
+    halo: Number(features.halo || 0),
+    rgb: colorspace === "rgb" ? 1 : 0,
+    extra: kernels - 1,
+    lookup_wide: features.lookup_wide ? 1 : 0,
+    lut_entries: Number(features.lut_entries || 0),
+    arith_ops: Number(features.arith_ops || 0),
+    pixels: Number(features.pixels || 0) || (((Number(features.width) || 0) * (Number(features.height) || 0)) / 1e6),
+    mb_moved: Number(features.mb_moved || 0),
+    halo_px: Number(features.halo_px || 0),
+    ms: null,
+    status: "exam",
+  };
+}
+
+function loadFeatures(opts) {
+  if (!opts.features) throw new Error("missing --features (JSON string or @file)");
+  const raw = opts.features.startsWith("@")
+    ? fs.readFileSync(path.resolve(opts.features.slice(1)), "utf8")
+    : opts.features;
+  return JSON.parse(raw);
+}
+
+function cmdExamPredict(opts, deps) {
+  if (!opts.catalog) throw new Error("missing --catalog");
+  const { checked } = loadCheckedCatalog(opts.catalog);
+  const trainRows = trainRowsOf(checked);
+  const fit = fitMinimumFormula(trainRows, deps);
+  const row = featuresToRow(loadFeatures(opts), opts.item);
+  const db = deps.openDb();
+  const ambiguity = modelAmbiguity(fit.tied, [row]);
+  if (ambiguity.ambiguous) {
+    const refused = {
+      sealed: false,
+      reason: "model_ambiguous",
+      item: row.id,
+      confounded_columns: ambiguity.confounded_columns,
+      tied_formulas: ambiguity.tied_formulas,
+      fix: "add a train module where the confounded columns differ before pricing this item",
+    };
+    refused.audit_id = deps.audit(db, "exam_predict", null, refused);
+    console.log(JSON.stringify(refused, null, 2));
+    return;
+  }
+  const names = ["base_ms", ...fit.chosen.features.map((name) => `${name}_ms`)];
+  const coefficients = Object.fromEntries(names.map((name, index) => [name, fit.chosen.coefficients[index]]));
+  // A coefficient fit over a narrow range is a local correction, not a
+  // physical rate. Sealing outside the trained range is allowed, but the
+  // seal records which feature values are extrapolations.
+  const examVector = rowVector(row, fit.chosen.features);
+  const outOfRange = fit.chosen.features
+    .map((name, index) => {
+      const seen = trainRows.map((train) => rowVector(train, fit.chosen.features)[index + 1]);
+      const min = Math.min(...seen);
+      const max = Math.max(...seen);
+      const value = examVector[index + 1];
+      return value < min || value > max ? { feature: name, value, trained_min: min, trained_max: max } : null;
+    })
+    .filter(Boolean);
+  const body = {
+    sealed: true,
+    item: row.id,
+    features: {
+      colorspace: row.colorspace,
+      kernels: row.kernels,
+      halo: row.halo,
+      lookup_wide: row.lookup_wide,
+      lut_entries: row.lut_entries,
+      arith_ops: row.arith_ops,
+      pixels: row.pixels,
+      mb_moved: row.mb_moved,
+    },
+    formula: `base_ms${fit.chosen.features.map((name) => ` + ${name}_ms * ${name}`).join("")}`,
+    coefficients,
+    report_ms: predictMs(row, fit.chosen.features, fit.chosen.coefficients),
+    sealed_at: new Date().toISOString(),
+    seal_note: "prediction sealed in the audit trail before any measurement is attached",
+    range_note: outOfRange.length
+      ? { warning: "prediction extrapolates beyond the trained range; treat as a guess", out_of_range: outOfRange }
+      : null,
+  };
+  const examId = deps.audit(db, "exam_predict", null, body);
+  body.exam_id = examId;
+  console.log(JSON.stringify(body, null, 2));
+}
+
+function cmdExamScore(opts, deps) {
+  if (!opts.exam) throw new Error("missing --exam");
+  if (!opts.record) throw new Error("missing --record");
+  if (!opts.metric) throw new Error("missing --metric");
+  const db = deps.openDb();
+  const sealed = db.prepare("SELECT id, action, detail FROM audit WHERE id = ?").get(Number(opts.exam));
+  if (!sealed || sealed.action !== "exam_predict") throw new Error(`no sealed exam prediction ${opts.exam}`);
+  const prediction = JSON.parse(sealed.detail);
+  if (!prediction.sealed || !Number.isFinite(prediction.report_ms)) {
+    throw new Error("sealed exam has no report_ms (refused seals cannot be scored)");
+  }
+  const doc = JSON.parse(fs.readFileSync(path.resolve(opts.record), "utf8"));
+  const metric = doc.metrics.find((item) => item.id === opts.metric);
+  if (!metric) throw new Error(`no metric ${opts.metric} in ${opts.record}`);
+  if (metric.status !== "accepted") throw new Error(`metric ${opts.metric} is ${metric.status}, not accepted`);
+  const measured = metric.median;
+  const accuracy = 1 - Math.abs(measured - prediction.report_ms) / measured;
+  const body = {
+    exam_id: sealed.id,
+    item: prediction.item,
+    sealed_at: prediction.sealed_at,
+    formula: prediction.formula,
+    report_ms: prediction.report_ms,
+    measured_ms: measured,
+    record: path.resolve(opts.record).replace(/\\/g, "/"),
+    metric: metric.id,
+    accuracy,
+    passes_85: accuracy >= 0.85,
+    verdict: accuracy >= 0.85 ? "pass" : "fail",
+  };
+  body.audit_id = deps.audit(db, "exam_score", null, body);
+  console.log(JSON.stringify(body, null, 2));
+}
+
+module.exports = {
+  cmdScanIop,
+  cmdMinLedger,
+  cmdAnnotateFeatures,
+  cmdFreezeTests,
+  cmdScore,
+  cmdExamPredict,
+  cmdExamScore,
+  scanIop,
+  classifyFile,
+  lookupWideFor,
+  kernelFeaturesFor,
+};

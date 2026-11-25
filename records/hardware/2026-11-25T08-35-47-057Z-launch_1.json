@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "shape_template",
+  "project": "template",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "template launch n=1, clFinish, 2560x1440"
+  },
+  "metrics": [
+    {
+      "id": "launch_1_2560x1440",
+      "shape": "launch",
+      "param": 1,
+      "kernels": 1,
+      "halo": 0,
+      "width": 2560,
+      "height": 1440,
+      "unit": "ms",
+      "samples": [
+        3.54473,
+        3.48937,
+        3.554857,
+        3.531752,
+        3.447825,
+        3.541604,
+        3.494321,
+        3.889362,
+        5.32675,
+        4.17671,
+        3.515048
+      ],
+      "median": 3.541604,
+      "min": 3.447825,
+      "max": 5.32675,
+      "stdev": 0.5596853825447747,
+      "stdev_over_median": 0.15803161012489672,
+      "status": "rejected_variance",
+      "clock": "template"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "shape_template",
+  "project": "template",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "template arith n=20, clFinish, 2560x1440"
+  },
+  "metrics": [
+    {
+      "id": "arith_20_2560x1440",
+      "shape": "arith",
+      "param": 20,
+      "kernels": 1,
+      "halo": 0,
+      "width": 2560,
+      "height": 1440,
+      "unit": "ms",
+      "samples": [
+        3.289984,
+        3.2035,
+        3.289204,
+        3.272656,
+        3.22118,
+        3.243336,
+        3.269496,
+        3.3295,
+        3.35515,
+        3.286544,
+        3.271568
+      ],
+      "median": 3.272656,
+      "min": 3.2035,
+      "max": 3.35515,
+      "stdev": 0.043598420369216455,
+      "stdev_over_median": 0.013322029681462535,
+      "status": "accepted",
+      "clock": "template"
+    }
+  ]
+}

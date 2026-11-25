@@ -19,4 +19,6 @@ node expert/cli.js view
 
 GPU、NPU、AIV、ISP 在 `init` 后是空平台。有探针之前不能给它们填业务帧里拆出来的数。
 
+三层之外是考试层，命令在 `project_ledger.js`：`scan-iop`、`annotate-features`、`freeze-tests`（入学考闸门）、`score`（判决）、`run-template`（形状模板库）、`exam-predict` / `exam-score`（毕业考封盘与宣判）。考试只读账本和记录，不改单价。
+
 换一个仓库时，拷走整个 `expert/` 目录，不要拷 `perfexpert.sqlite`。改 `config.json` 的 `platform_id` 和 `prices.json` 里的数，再运行 `init`。

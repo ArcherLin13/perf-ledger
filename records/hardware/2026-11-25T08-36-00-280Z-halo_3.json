@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "shape_template",
+  "project": "template",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "template halo n=3, clFinish, 1920x1080"
+  },
+  "metrics": [
+    {
+      "id": "halo_3_1920x1080",
+      "shape": "halo",
+      "param": 3,
+      "kernels": 1,
+      "halo": 3,
+      "width": 1920,
+      "height": 1080,
+      "unit": "ms",
+      "samples": [
+        1.580973,
+        1.508487,
+        1.539052,
+        1.535017,
+        1.52894,
+        1.573228,
+        1.542312,
+        1.586188,
+        1.5985,
+        1.534255,
+        1.553943
+      ],
+      "median": 1.542312,
+      "min": 1.508487,
+      "max": 1.5985,
+      "stdev": 0.028120587861112475,
+      "stdev_over_median": 0.018232749185062735,
+      "status": "accepted",
+      "clock": "template"
+    }
+  ]
+}

@@ -961,16 +961,37 @@ function main() {
   if (command === "min-ledger") {
     return require("./project_ledger").cmdMinLedger(opts, { openDb, solveLinear, audit });
   }
+  if (command === "freeze-tests") {
+    return require("./project_ledger").cmdFreezeTests(opts, { openDb, audit });
+  }
+  if (command === "score") {
+    return require("./project_ledger").cmdScore(opts, { openDb, solveLinear, audit });
+  }
   if (command === "discover") return require("./bringup.cjs").cmdDiscover();
   if (command === "run-probe") return require("./bringup.cjs").cmdRunProbe(opts);
   if (command === "commit-prices") return require("./bringup.cjs").cmdCommitPrices(opts);
   if (command === "plan-split") return require("./bringup.cjs").cmdPlanSplit(opts);
+  if (command === "annotate-features") return require("./project_ledger").cmdAnnotateFeatures(opts);
+  if (command === "measure-module") {
+    console.log(JSON.stringify(require("./bringup.cjs").cmdMeasureModule(opts), null, 2));
+    return;
+  }
+  if (command === "run-template") {
+    console.log(JSON.stringify(require("./bringup.cjs").cmdRunTemplate(opts), null, 2));
+    return;
+  }
+  if (command === "exam-predict") {
+    return require("./project_ledger").cmdExamPredict(opts, { openDb, solveLinear, audit });
+  }
+  if (command === "exam-score") {
+    return require("./project_ledger").cmdExamScore(opts, { openDb, audit });
+  }
   if (command === "view") {
     require("./view").start(Number(opts.port || 8765));
     return;
   }
   throw new Error(
-    "commands: init | prices | shapes | estimate | estimate-wall | audit | anchor | anchors | price-set | module-set | check | launch-fit | accuracy | wall-fit | ledger | scan-iop | min-ledger | discover | run-probe | commit-prices | plan-split | view"
+    "commands: init | prices | shapes | estimate | estimate-wall | audit | anchor | anchors | price-set | module-set | check | launch-fit | accuracy | wall-fit | ledger | scan-iop | min-ledger | freeze-tests | score | discover | run-probe | commit-prices | plan-split | annotate-features | measure-module | run-template | exam-predict | exam-score | view"
   );
 }
 

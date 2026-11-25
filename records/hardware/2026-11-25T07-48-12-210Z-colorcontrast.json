@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "module_process_cl",
+  "project": "libre-dt-lab",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "one process_cl launch, clFinish, 1920x1080"
+  },
+  "metrics": [
+    {
+      "id": "colorcontrast_1920x1080",
+      "module": "colorcontrast",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "unit": "ms",
+      "samples": [
+        2.061395,
+        2.135742,
+        2.098305,
+        2.044033,
+        2.049543,
+        2.138247,
+        1.9862,
+        2.00188,
+        2.013617,
+        1.989035,
+        2.028965
+      ],
+      "median": 2.044033,
+      "min": 1.9862,
+      "max": 2.138247,
+      "stdev": 0.05431971746947541,
+      "stdev_over_median": 0.02657477519662129,
+      "status": "accepted",
+      "clock": "process_cl"
+    }
+  ]
+}

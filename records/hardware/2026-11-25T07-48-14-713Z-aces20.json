@@ -1,0 +1,45 @@
+{
+  "perfbind": 1,
+  "backend": "opencl",
+  "probe_set": "module_process_cl",
+  "project": "libre-dt-lab",
+  "protocol": {
+    "warmup_windows": 3,
+    "samples": 11,
+    "window": "at least 8 launches and 80 ms",
+    "variance_gate": "stdev/median > 0.08 => rejected_variance",
+    "clock": "one process_cl launch, clFinish, 1920x1080"
+  },
+  "metrics": [
+    {
+      "id": "aces20_1920x1080",
+      "module": "aces20",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "width": 1920,
+      "height": 1080,
+      "unit": "ms",
+      "samples": [
+        11.794812,
+        11.936913,
+        12.1606,
+        11.892525,
+        11.865938,
+        11.900037,
+        12.0489,
+        11.901637,
+        12.010112,
+        11.915388,
+        11.782725
+      ],
+      "median": 11.901637,
+      "min": 11.782725,
+      "max": 12.1606,
+      "stdev": 0.11005961987585738,
+      "stdev_over_median": 0.009247435447397478,
+      "status": "accepted",
+      "clock": "process_cl"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ description: When to scan, when to refuse, how the minimum ledger is chosen, and
 
 # Ledger rules
 
-Quote only numbers printed by `discover_platform`, `run_probe`, `commit_prices`, `plan_split`, `scan_iop`, `min_ledger`, `estimate_cost`, or `anchor_check`. Do not recompute milliseconds, prices, or accuracy.
+Quote only numbers printed by `discover_platform`, `run_probe`, `commit_prices`, `plan_split`, `freeze_tests`, `score`, `annotate_features`, `measure_module`, `run_template`, `exam_predict`, `exam_score`, `scan_iop`, `min_ledger`, `estimate_cost`, or `anchor_check`. Do not recompute milliseconds, prices, or accuracy.
 
 ## New platform
 
@@ -16,8 +16,11 @@ Quote only numbers printed by `discover_platform`, `run_probe`, `commit_prices`,
 
 ## New project
 
-- `plan_split` picks train and test from source features before measurement. `needs_branch` modules are in neither set.
-- Training accuracy is not evidence. Held-out `passes_85` is the evidence. Do not move a test module into train after seeing its residual.
+- `plan_split` proposes the first catalog: minimal training modules, a sampled exam (two test entries per shape cell at planned sizes), and `claimed` modules that join the claim from classification alone and need no measurement. The claim is what you classify, not what you measure. `freeze_tests` is the gate that freezes it: it refuses unless every claimed shape has a test, every claimed shape has at least two tests with different declared cost signatures, and the claim covers at least 80% of the classifiable hot paths. `needs_branch` modules count as classifiable; unresolved ones are uncovered, and the coverage gap names how many more must be resolved (`need_additional_claimed`). Resolve a branch from the printed branch digest, not from reading the whole file.
+- `score` is the verdict. It fails when the catalog is not frozen, coverage is below the bar, any frozen claimed test is unmeasured, or any measured test is below 0.85. An unmeasured claimed test is a failure, not a skip. `measured_test_all_pass_85` from `min_ledger` is fitting diagnostics, not the verdict.
+- `lookup_wide` is 1 when the module's own OpenCL kernel declares an array or macro of size 64 or more. `annotate_features` writes it. It is another column `min_ledger` may select.
+- Training accuracy is not evidence. A measured test module stays in the test set. An unmeasured module may be measured to fill a training cell the current formula does not separate.
+- Follow the `campaign` skill. A failed `score` verdict starts another round. It does not end the task.
 
 ## Two clocks
 
@@ -35,7 +38,22 @@ Quote only numbers printed by `discover_platform`, `run_probe`, `commit_prices`,
 
 The darktable catalog is `catalog/darktable.json`. Its source tree is `D:/WorkStation/PerfRepo/upstream/darktable/src/iop`.
 
-`min_ledger` chooses the smallest formula that fits every accepted training point at accuracy 0.85 or higher. The minimum measurement count is the column count of that formula. A smaller set is unusable when the fit is singular. Training accuracy is not evidence. Held-out modules with `passes_85` are the evidence.
+`min_ledger` chooses the smallest formula that fits every accepted training point at accuracy 0.85 or higher. The minimum measurement count is the column count of that formula. A smaller set is unusable when the fit is singular. Training accuracy is not evidence. Held-out modules with `passes_85` are the evidence. The reported coefficients are least squares over the whole accepted training pool — the same coefficients the admissibility gate checked. The minimum basis (`minimum_set`, `basis_fit`) stays in the output only as proof of the measurement floor.
+
+When several smallest formulas fit the training pool, the data cannot tell them apart. `min_ledger` prints them as `tied_formulas` with `confounded_columns`; `score` fails with `model_ambiguous`. The fix is not to pick one: it is to measure a train module where the confounded columns differ, then fit again. Template rows from `run_template` are the cheapest separating measurements because each one moves exactly one shape column.
+
+## Template library and graduation exam
+
+- `run_template` times one synthetic instance (`lut`, `arith`, `halo`, `launch`) at a chosen size and writes a normal record. Template records train the shape vocabulary; they are platform experience like any other accepted record.
+- Feature columns include `lut_entries`, `arith_ops`, `pixels`, `mb_moved`, `arith_px` and `arith_px_sq` (ops and ops squared, times megapixels), `halo_px` (kernel-neighborhood radius read from the kernel source) and `halo_px_px`. The minimum search may select any of them.
+- `mb_moved` is megabytes of distinct data the run must stream: in, out, and per-pixel table reads, times launch count. Neighbor re-reads inside one launch are cache traffic, not movement — on iris-xe a radius-1..4 halo sweep is flat, and the fit confirms it by pricing `mb_moved` and dropping the raw read count.
+- `exam_predict` seals the report in the audit log before the item is measured. It refuses when the model is ambiguous. There is no un-sealing and no re-sealing of the same exam id. When a sealed feature value lies outside the trained range, the seal carries a `range_note`; an out-of-range seal is a guess and a failed one is the note working, not a surprise.
+- `exam_score` needs the sealed exam id, an accepted record, and the metric id. Accuracy is the same 0.85 line. A failed exam names the missing shape; it is not permission to adjust the sealed number.
+
+## Known limits learned on iris-xe
+
+- **Instance-level codegen luck.** On 2026-11-25 the gallery exam measured `arith` at 2560x1440 across three sessions: n=20 → 3.18/3.27/3.14 ms, n=30 → 2.94/2.95/2.96 ms. More work runs faster, reproducibly. No smooth feature separates these instances, so a frozen test sitting on such an instance fails at about 0.71–0.79 while the family curve stays right everywhere else. Hygiene: confirm a suspicious measurement across sessions before believing an inversion. Terminal state: name the instance luck in the report; do not add contradictory train rows — that breaks every formula (`train_fit_failed`).
+- **Feature alphabets.** `annotate-features` counts the transcendental alphabet of darktable kernels (no `sqrt`), so a template cycle of six ops extracts five. Inside one catalog the count is proportional and self-consistent; do not compare raw counts across extractors.
 
 Do not add a test module to the training pool after seeing its residual. Do not run `price-set` or `init` from a residual. `rule_needs_review` means the shape rule needs review. It does not authorize a price edit.
 

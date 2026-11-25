@@ -1,0 +1,516 @@
+{
+  "project": "iop",
+  "iop_src": "D:/WorkStation/samples/libre-dt-lab/src/iop",
+  "measured": false,
+  "modules": [
+    {
+      "id": "colorcontrast",
+      "role": "train",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "record": "records/hardware/2026-11-25T07-48-12-210Z-colorcontrast.json",
+      "metric_id": "colorcontrast_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "aces20",
+      "role": "train",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "record": "records/hardware/2026-11-25T07-48-14-713Z-aces20.json",
+      "metric_id": "aces20_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lookup_wide": 1,
+      "lut_entries": 400,
+      "arith_ops": 17,
+      "halo_px": 0
+    },
+    {
+      "id": "agx",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 2,
+      "arith_ops": 1,
+      "halo_px": 0
+    },
+    {
+      "id": "channelmixer",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 8,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "channelmixerrgb",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "colorbalancergb",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 3,
+      "arith_ops": 2,
+      "halo_px": 0
+    },
+    {
+      "id": "colorchecker",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 8,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "colorcorrection",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "colorize",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "exposure",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "record": "records/hardware/2026-11-25T08-02-20-027Z-exposure.json",
+      "metric_id": "exposure_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "flip",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "graduatednd",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "negadoctor",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "overexposed",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "primaries",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "relight",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 1,
+      "halo_px": 0
+    },
+    {
+      "id": "shadhi",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "spectral_tone",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "record": "records/hardware/2026-11-25T07-48-16-651Z-spectral_tone.json",
+      "metric_id": "spectral_tone_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lookup_wide": 0,
+      "lut_entries": 9,
+      "arith_ops": 7,
+      "halo_px": 0
+    },
+    {
+      "id": "splittoning",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "record": "records/hardware/2026-11-25T08-02-23-292Z-splittoning.json",
+      "metric_id": "splittoning_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "vibrance",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "record": "records/hardware/2026-11-25T08-02-21-648Z-vibrance.json",
+      "metric_id": "vibrance_1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "vignette",
+      "role": "test",
+      "colorspace": "rgb",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 2,
+      "arith_ops": 4,
+      "halo_px": 0
+    },
+    {
+      "id": "zonesystem",
+      "role": "test",
+      "colorspace": "lab",
+      "kernels": 1,
+      "halo": 0,
+      "branch_resolved": false,
+      "lookup_wide": 0,
+      "lut_entries": 0,
+      "arith_ops": 0,
+      "halo_px": 0
+    },
+    {
+      "id": "ashift_lsd",
+      "role": "refuse"
+    },
+    {
+      "id": "ashift_nmsimplex",
+      "role": "refuse"
+    },
+    {
+      "id": "atrous",
+      "role": "refuse"
+    },
+    {
+      "id": "basecurve",
+      "role": "refuse"
+    },
+    {
+      "id": "basicadj",
+      "role": "refuse"
+    },
+    {
+      "id": "bilat",
+      "role": "refuse"
+    },
+    {
+      "id": "bloom",
+      "role": "refuse"
+    },
+    {
+      "id": "cacorrect",
+      "role": "refuse"
+    },
+    {
+      "id": "cacorrectrgb",
+      "role": "refuse"
+    },
+    {
+      "id": "censorize",
+      "role": "refuse"
+    },
+    {
+      "id": "clahe",
+      "role": "refuse"
+    },
+    {
+      "id": "colisa",
+      "role": "refuse"
+    },
+    {
+      "id": "colorin",
+      "role": "refuse"
+    },
+    {
+      "id": "colorout",
+      "role": "refuse"
+    },
+    {
+      "id": "colorreconstruction",
+      "role": "refuse"
+    },
+    {
+      "id": "colortransfer",
+      "role": "refuse"
+    },
+    {
+      "id": "colorzones",
+      "role": "refuse"
+    },
+    {
+      "id": "crop",
+      "role": "refuse"
+    },
+    {
+      "id": "defringe",
+      "role": "refuse"
+    },
+    {
+      "id": "demosaic",
+      "role": "refuse"
+    },
+    {
+      "id": "denoiseprofile",
+      "role": "refuse"
+    },
+    {
+      "id": "dither",
+      "role": "refuse"
+    },
+    {
+      "id": "enlargecanvas",
+      "role": "refuse"
+    },
+    {
+      "id": "equalizer",
+      "role": "refuse"
+    },
+    {
+      "id": "filmic",
+      "role": "refuse"
+    },
+    {
+      "id": "filmicrgb",
+      "role": "refuse"
+    },
+    {
+      "id": "finalscale",
+      "role": "refuse"
+    },
+    {
+      "id": "gamma",
+      "role": "refuse"
+    },
+    {
+      "id": "grain",
+      "role": "refuse"
+    },
+    {
+      "id": "hazeremoval",
+      "role": "refuse"
+    },
+    {
+      "id": "highlights",
+      "role": "refuse"
+    },
+    {
+      "id": "hotpixels",
+      "role": "refuse"
+    },
+    {
+      "id": "invert",
+      "role": "refuse"
+    },
+    {
+      "id": "levels",
+      "role": "refuse"
+    },
+    {
+      "id": "liquify",
+      "role": "refuse"
+    },
+    {
+      "id": "lowlight",
+      "role": "refuse"
+    },
+    {
+      "id": "lowpass",
+      "role": "refuse"
+    },
+    {
+      "id": "mask_manager",
+      "role": "refuse"
+    },
+    {
+      "id": "nlmeans",
+      "role": "refuse"
+    },
+    {
+      "id": "profile_gamma",
+      "role": "refuse"
+    },
+    {
+      "id": "rasterfile",
+      "role": "refuse"
+    },
+    {
+      "id": "rawdenoise",
+      "role": "refuse"
+    },
+    {
+      "id": "rawoverexposed",
+      "role": "refuse"
+    },
+    {
+      "id": "rawprepare",
+      "role": "refuse"
+    },
+    {
+      "id": "rgbcurve",
+      "role": "refuse"
+    },
+    {
+      "id": "rgblevels",
+      "role": "refuse"
+    },
+    {
+      "id": "rotatepixels",
+      "role": "refuse"
+    },
+    {
+      "id": "scalepixels",
+      "role": "refuse"
+    },
+    {
+      "id": "spots",
+      "role": "refuse"
+    },
+    {
+      "id": "temperature",
+      "role": "refuse"
+    },
+    {
+      "id": "tonecurve",
+      "role": "refuse"
+    },
+    {
+      "id": "toneequal",
+      "role": "refuse"
+    },
+    {
+      "id": "useless",
+      "role": "refuse"
+    },
+    {
+      "id": "watermark",
+      "role": "refuse"
+    }
+  ],
+  "measured_modules": [
+    "colorcontrast",
+    "aces20",
+    "spectral_tone"
+  ]
+}

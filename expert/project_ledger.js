@@ -569,6 +569,7 @@ function cmdMinLedger(opts, deps) {
   const pricedByScan = scanned.modules.filter((item) => item.decision === "module_wall" && !catalogIds.has(item.id));
   const body = {
     catalog: path.resolve(opts.catalog).replace(/\\/g, "/"),
+    catalog_sha: catalog.sha ?? null,
     scanned_files: scanned.files,
     scan_by_decision: scanned.by_decision,
     scan_by_reason: scanned.by_reason,
@@ -683,6 +684,7 @@ function freezeTests(opts, deps) {
   const ok = !gaps.coverage && breadth.length === 0 && depth.length === 0;
   const body = {
     catalog: catalogPath.replace(/\\/g, "/"),
+    catalog_sha: catalog.sha ?? null,
     ok,
     frozen: false,
     min_coverage: minCoverage,
@@ -812,6 +814,7 @@ function cmdScore(opts, deps) {
   if (!tests.length) failures.push({ reason: "no_tests" });
   const body = {
     catalog: catalogPath.replace(/\\/g, "/"),
+    catalog_sha: catalog.sha ?? null,
     verdict: failures.length === 0 ? "pass" : "fail",
     frozen: Boolean(freeze),
     freeze_stamp: freeze ? freeze.stamp : null,
@@ -956,7 +959,7 @@ function loadFeatures(opts) {
 
 function cmdExamPredict(opts, deps) {
   if (!opts.catalog) throw new Error("missing --catalog");
-  const { checked } = loadCheckedCatalog(opts.catalog);
+  const { catalog, checked } = loadCheckedCatalog(opts.catalog);
   const trainRows = trainRowsOf(checked);
   const fit = fitMinimumFormula(trainRows, deps);
   const row = featuresToRow(loadFeatures(opts), opts.item);
@@ -966,6 +969,8 @@ function cmdExamPredict(opts, deps) {
     const refused = {
       sealed: false,
       reason: "model_ambiguous",
+      catalog: path.resolve(opts.catalog).replace(/\\/g, "/"),
+      catalog_sha: catalog.sha ?? null,
       item: row.id,
       confounded_columns: ambiguity.confounded_columns,
       tied_formulas: ambiguity.tied_formulas,
@@ -992,6 +997,8 @@ function cmdExamPredict(opts, deps) {
     .filter(Boolean);
   const body = {
     sealed: true,
+    catalog: path.resolve(opts.catalog).replace(/\\/g, "/"),
+    catalog_sha: catalog.sha ?? null,
     item: row.id,
     features: {
       colorspace: row.colorspace,
@@ -1036,6 +1043,8 @@ function cmdExamScore(opts, deps) {
   const accuracy = 1 - Math.abs(measured - prediction.report_ms) / measured;
   const body = {
     exam_id: sealed.id,
+    catalog: prediction.catalog ?? null,
+    catalog_sha: prediction.catalog_sha ?? null,
     item: prediction.item,
     sealed_at: prediction.sealed_at,
     formula: prediction.formula,

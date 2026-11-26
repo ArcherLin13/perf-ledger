@@ -10,15 +10,19 @@ export default defineTool({
     kernels: z.string().min(1).optional(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
+    catalog: z.string().min(1).optional(),
+    force: z.boolean().optional(),
   }),
   effect: "write",
   dryRunResult: ({ module }) => ({ ok: false, skipped: true, reason: "dry-run", module }),
-  async execute({ module, kernels, width, height }, ctx) {
+  async execute({ module, kernels, width, height, catalog, force }, ctx) {
     if (ctx.session.purpose === "eval") return { ok: false, skipped: true, reason: "eval", module };
     const args = ["measure-module", "--module", module];
     if (kernels) args.push("--kernels", kernels);
     if (width !== undefined) args.push("--width", String(width));
     if (height !== undefined) args.push("--height", String(height));
+    if (catalog) args.push("--catalog", catalog);
+    if (force) args.push("--force", "true");
     return runLedger(args);
   },
 });

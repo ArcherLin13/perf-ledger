@@ -32,6 +32,15 @@ Run the CLI under Node, never Bun.
 - Add npm deps on a first cut. Stick to what `@grok/agent-sdk` already ships.
 - Point `serve` at a parent folder during bring-up. It mounts every sibling.
 
+## Experience store invariants
+
+- Records are never deleted. Write-time dedup blocks redundant writes
+  (`--force true` overrides for intentional cross-session validation).
+- `bump-sha` moves a catalog's source sha forward; stale records fail as
+  `stale_record` while staying on disk, queryable.
+- `doctor` is the periodic read-only health check. It prescribes; the
+  operator acts.
+
 ## Pointers
 
 - Package loop: `node_modules/@grok/agent-sdk/AGENTS.md`

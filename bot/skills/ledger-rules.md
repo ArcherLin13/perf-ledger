@@ -50,6 +50,13 @@ When several smallest formulas fit the training pool, the data cannot tell them 
 - `exam_predict` seals the report in the audit log before the item is measured. It refuses when the model is ambiguous. There is no un-sealing and no re-sealing of the same exam id. When a sealed feature value lies outside the trained range, the seal carries a `range_note`; an out-of-range seal is a guess and a failed one is the note working, not a surprise.
 - `exam_score` needs the sealed exam id, an accepted record, and the metric id. Accuracy is the same 0.85 line. A failed exam names the missing shape; it is not permission to adjust the sealed number.
 
+## Memory lifecycle
+
+- **Write-time dedup.** `measure_module` and `run_template` refuse to write when an equivalent `accepted` record exists: same probe set, same metric id, same catalog sha, median within 3%. The output names the kept file as `duplicate_of`. Re-measure on purpose — cross-session validation of a suspicious result — with `force: true`.
+- **Version invalidation.** A record measured with `catalog` set is stamped with the catalog's sha. After `bump_sha` moves the catalog forward, those records are stale: fits exclude them, a frozen test holding one fails with `stale_record`, and the files stay on disk and queryable. Re-measure under the new sha to refresh. Never delete the old ones.
+- **Periodic health check.** `doctor` is read-only and prints a prescription: sha drift against the source HEAD, dangling record pointers, stale records, orphan records, duplicates the gate missed, and platform probes older than 30 days. Run it when a repository or a platform may have moved; act on the prescription yourself.
+- **Tiers.** Hot: fitted coefficients and frozen tests. Warm: accepted records the catalogs point at. Cold: every other record plus the audit log. Cold data may be archived (moved to `records/archive/`), never deleted. The audit log is the ledger itself; it is never purged.
+
 ## Known limits learned on iris-xe
 
 - **Instance-level codegen luck.** On 2026-11-25 the gallery exam measured `arith` at 2560x1440 across three sessions: n=20 → 3.18/3.27/3.14 ms, n=30 → 2.94/2.95/2.96 ms. More work runs faster, reproducibly. No smooth feature separates these instances, so a frozen test sitting on such an instance fails at about 0.71–0.79 while the family curve stays right everywhere else. Hygiene: confirm a suspicious measurement across sessions before believing an inversion. Terminal state: name the instance luck in the report; do not add contradictory train rows — that breaks every formula (`train_fit_failed`).

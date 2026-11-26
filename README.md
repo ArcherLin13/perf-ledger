@@ -69,6 +69,17 @@ agent 工具和命令的对应关系：
 | `min_ledger` | `min-ledger --catalog <file>` |
 | `estimate_cost` | `estimate-wall` 或 `estimate` |
 | `anchor_check` | `anchor` 或 `check` |
+| `doctor` | `doctor [--catalog <file>] [--days N]` |
+| `bump_sha` | `bump-sha --catalog <file> --sha <sha\|auto>` |
+
+## 记忆管理
+
+经验的防漂移机制，四条：
+
+- **写入查重**：`measure-module`/`run-template` 发现同 probe 集、同指标、同 catalog sha、中位数差 ≤3% 的 accepted 记录时拒绝写盘，返回 `duplicate_of`。跨 session 复测（比如验证实例运气）用 `--force true`。
+- **版本失效**：带 `--catalog` 测量的记录钉上该目录的 sha。`bump-sha` 把目录 sha 往前推之后，旧记录变 stale：拟合排除、冻结考题判 `stale_record`，但文件永留磁盘可查。新 sha 下重测即可刷新。设计来自 Zep 的双时间线：失效不删除。
+- **周期体检**：`doctor` 只读，出处方——sha 漂移、悬空指针、stale、孤儿记录、漏网重复、平台探针超期。仓库或平台可能变过就跑一次。
+- **冷热分层**：热=拟合系数+冻结考题；温=catalog 引用的 accepted 记录；冷=其余全部记录+审计。冷数据只可归档移动，永不删除；审计是账本本身，永不清空。
 
 写操作在 eval 会话里直接跳过，不跑探针，也不写单价。
 

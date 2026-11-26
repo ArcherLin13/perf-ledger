@@ -10,14 +10,18 @@ export default defineTool({
     n: z.number().int().positive(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
+    catalog: z.string().min(1).optional(),
+    force: z.boolean().optional(),
   }),
   effect: "write",
   dryRunResult: ({ shape, n }) => ({ ok: false, skipped: true, reason: "dry-run", shape, n }),
-  async execute({ shape, n, width, height }, ctx) {
+  async execute({ shape, n, width, height, catalog, force }, ctx) {
     if (ctx.session.purpose === "eval") return { ok: false, skipped: true, reason: "eval", shape, n };
     const args = ["run-template", "--shape", shape, "--n", String(n)];
     if (width !== undefined) args.push("--width", String(width));
     if (height !== undefined) args.push("--height", String(height));
+    if (catalog) args.push("--catalog", catalog);
+    if (force) args.push("--force", "true");
     return runLedger(args);
   },
 });

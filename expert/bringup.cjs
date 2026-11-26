@@ -165,7 +165,16 @@ function discoverBackends() {
 
 function summarize(samples) {
   if (!Array.isArray(samples) || samples.length !== 11) {
-    return { median: null, stdev: null, stdev_over_median: null, status: "rejected_variance", samples: samples || [] };
+    const n = Array.isArray(samples) ? samples.length : 0;
+    return {
+      median: null,
+      stdev: null,
+      stdev_over_median: null,
+      status: "rejected_variance",
+      reason: `expected 11 samples, got ${n}`,
+      n,
+      samples: samples || [],
+    };
   }
   const sorted = [...samples].sort((a, b) => a - b);
   const median = sorted[(sorted.length - 1) >> 1];
@@ -173,13 +182,16 @@ function summarize(samples) {
   const variance = samples.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (samples.length - 1);
   const stdev = Math.sqrt(variance);
   const ratio = median === 0 ? Infinity : stdev / median;
+  const rejected = ratio > 0.08;
   return {
     median,
     min: sorted[0],
     max: sorted[sorted.length - 1],
     stdev,
     stdev_over_median: ratio,
-    status: ratio > 0.08 ? "rejected_variance" : "accepted",
+    status: rejected ? "rejected_variance" : "accepted",
+    reason: rejected ? `stdev/median ${ratio.toFixed(4)} > 0.08` : null,
+    n: samples.length,
     samples,
   };
 }
@@ -190,7 +202,11 @@ function stamp() {
 
 function writeRecord(backend, body) {
   fs.mkdirSync(recordDir, { recursive: true });
-  const file = path.join(recordDir, `${stamp()}-${backend}.json`);
+  // Millisecond timestamps can collide (two writes for one backend inside
+  // the same ms). Never overwrite an existing record: suffix instead.
+  const base = path.join(recordDir, `${stamp()}-${backend}`);
+  let file = `${base}.json`;
+  for (let i = 2; fs.existsSync(file); i++) file = `${base}-${i}.json`;
   fs.writeFileSync(file, JSON.stringify(body, null, 2));
   return file;
 }
@@ -237,6 +253,13 @@ function findDuplicate(newDoc, median) {
     if ((doc.catalog_sha ?? null) !== keySha) continue;
     const other = (doc.metrics || []).find((item) => item.id === metric.id);
     if (!other || other.status !== "accepted" || !Number.isFinite(other.median)) continue;
+    // Do not trust the metric id to carry the size: when both sides carry
+    // structured dimensions, they must match exactly, or two different
+    // data points could merge into one.
+    const dimsDiffer = ["width", "height", "param", "bytes"].some(
+      (field) => Number.isFinite(metric[field]) && Number.isFinite(other[field]) && metric[field] !== other[field]
+    );
+    if (dimsDiffer) continue;
     if (Math.abs(other.median - median) / median <= 0.03) {
       return { file: path.join(recordDir, name).replace(/\\/g, "/"), median: other.median };
     }
@@ -244,7 +267,45 @@ function findDuplicate(newDoc, median) {
   return null;
 }
 
-function blockedRecord(backend, reason) {
+// A blocked run carries no new information once the same blocker is on
+// file: re-probing an absent device must not flood records/hardware.
+function findBlockedDuplicate(backend, reason) {
+  let files;
+  try {
+    files = fs.readdirSync(recordDir).filter((name) => name.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  for (const name of files) {
+    let doc;
+    try {
+      doc = JSON.parse(fs.readFileSync(path.join(recordDir, name), "utf8"));
+    } catch {
+      continue;
+    }
+    if (doc.probe_set !== backend) continue;
+    const metric = (doc.metrics || [])[0];
+    if (!metric || metric.kind !== "blocked" || metric.what !== reason) continue;
+    return path.join(recordDir, name).replace(/\\/g, "/");
+  }
+  return null;
+}
+
+function blockedRecord(backend, reason, force) {
+  if (force !== true && force !== "true") {
+    const dup = findBlockedDuplicate(backend, reason);
+    if (dup) {
+      return {
+        ok: false,
+        blocked: reason,
+        record: dup,
+        duplicate_of: dup,
+        dedup: "skipped_write",
+        prices_written: false,
+        note: "the same blocker is already on file; rerun with --force true to keep a new record",
+      };
+    }
+  }
   const file = writeRecord(backend, {
     perfbind: 1,
     backend,
@@ -293,25 +354,63 @@ function compileProbe(backend, info) {
   return { ok: true, exe, command: `${info.compiler} ${args.join(" ")}` };
 }
 
-function runProbe(backend) {
+// Same idea as findDuplicate, for multi-metric platform probes: every
+// metric must exist, be accepted on both sides, carry the same structured
+// dimensions, and sit within 3%.
+function findProbeDuplicate(newDoc) {
+  const metrics = newDoc.metrics || [];
+  if (!metrics.length || metrics.some((metric) => metric.status !== "accepted" || !Number.isFinite(metric.median))) {
+    return null;
+  }
+  let files;
+  try {
+    files = fs.readdirSync(recordDir).filter((name) => name.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  for (const name of files) {
+    let doc;
+    try {
+      doc = JSON.parse(fs.readFileSync(path.join(recordDir, name), "utf8"));
+    } catch {
+      continue;
+    }
+    if (doc.probe_set !== newDoc.probe_set) continue;
+    const others = doc.metrics || [];
+    if (others.length !== metrics.length) continue;
+    const allMatch = metrics.every((metric) => {
+      const other = others.find((item) => item.id === metric.id);
+      if (!other || other.status !== "accepted" || !Number.isFinite(other.median)) return false;
+      const dimsDiffer = ["width", "height", "param", "bytes"].some(
+        (field) => Number.isFinite(metric[field]) && Number.isFinite(other[field]) && metric[field] !== other[field]
+      );
+      return !dimsDiffer && Math.abs(other.median - metric.median) / metric.median <= 0.03;
+    });
+    if (allMatch) return path.join(recordDir, name).replace(/\\/g, "/");
+  }
+  return null;
+}
+
+function runProbe(backend, opts = {}) {
   const found = discoverBackends();
   const info = found.backends.find((item) => item.id === backend);
   if (!info) throw new Error(`unknown backend ${backend}`);
+  const force = opts.force === true || opts.force === "true";
   if (!info.present || (info.missing && info.missing.length)) {
-    return blockedRecord(backend, info.missing && info.missing.length ? info.missing.join(",") : "device_absent");
+    return blockedRecord(backend, info.missing && info.missing.length ? info.missing.join(",") : "device_absent", force);
   }
   const built = compileProbe(backend, info);
-  if (!built.ok) return blockedRecord(backend, built.reason);
+  if (!built.ok) return blockedRecord(backend, built.reason, force);
   const ran = spawnSync(built.exe, [], { encoding: "utf8" });
   const text = (ran.stdout || "").trim();
   let parsed = null;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return blockedRecord(backend, "probe_output_not_json");
+    return blockedRecord(backend, "probe_output_not_json", force);
   }
   if (parsed.blocked || ran.status === 2) {
-    return blockedRecord(backend, parsed.blocked || "probe_blocked");
+    return blockedRecord(backend, parsed.blocked || "probe_blocked", force);
   }
   const metrics = (parsed.metrics || []).map((metric) => {
     const stats = summarize(metric.samples);
@@ -325,7 +424,14 @@ function runProbe(backend) {
       ...stats,
     };
   });
-  const file = writeRecord(backend, {
+  const summary = metrics.map((metric) => ({
+    id: metric.id,
+    kind: metric.kind,
+    status: metric.status,
+    median: metric.median,
+    stdev_over_median: metric.stdev_over_median,
+  }));
+  const body = {
     perfbind: 1,
     backend,
     probe_set: parsed.probe_set || backend,
@@ -335,19 +441,29 @@ function runProbe(backend) {
     command: built.command,
     protocol: { warmup: 3, samples: 11, target_ms: 150, variance_gate: "stdev/median > 0.08 => rejected_variance" },
     metrics,
-  });
+  };
+  if (!force) {
+    const dup = findProbeDuplicate(body);
+    if (dup) {
+      return {
+        ok: true,
+        blocked: null,
+        record: dup,
+        duplicate_of: dup,
+        dedup: "skipped_write",
+        prices_written: false,
+        metrics: summary,
+        note: "an equivalent accepted record exists within 3% on every metric; rerun with --force true to keep a new sample",
+      };
+    }
+  }
+  const file = writeRecord(backend, body);
   return {
     ok: true,
     blocked: null,
     record: file.replace(/\\/g, "/"),
     prices_written: false,
-    metrics: metrics.map((metric) => ({
-      id: metric.id,
-      kind: metric.kind,
-      status: metric.status,
-      median: metric.median,
-      stdev_over_median: metric.stdev_over_median,
-    })),
+    metrics: summary,
   };
 }
 
@@ -464,6 +580,14 @@ function commitPrices(opts) {
 function planSplit(opts) {
   if (!opts.src) throw new Error("missing --src");
   if (!opts.out) throw new Error("missing --out");
+  // Planned exam sizes default to desktop frames; phones and cameras pass
+  // their native sizes, e.g. --sizes 1216x2688,4000x3000.
+  const sizeSpecs = opts.sizes ? String(opts.sizes).split(",") : ["1920x1080", "2560x1440"];
+  const sizes = sizeSpecs.map((spec, index) => {
+    const match = /^\s*(\d+)x(\d+)\s*$/.exec(spec);
+    if (!match) throw new Error(`bad --sizes entry: ${spec} (want WxH[,WxH])`);
+    return { width: Number(match[1]), height: Number(match[2]) };
+  });
   const { scanIop } = require("./project_ledger");
   const scanned = scanIop(opts.src);
   const priceable = scanned.modules.filter((item) => item.decision === "module_wall");
@@ -509,8 +633,9 @@ function planSplit(opts) {
   const claimed = [];
   for (const key of [...cells.keys()].sort()) {
     const members = cells.get(key).sort((a, b) => a.id.localeCompare(b.id));
-    if (members[0]) test.push({ ...members[0], width: 1920, height: 1080 });
-    if (members[1]) test.push({ ...members[1], width: 2560, height: 1440 });
+    if (members[0]) test.push({ ...members[0], width: sizes[0].width, height: sizes[0].height });
+    const second = sizes[1] || sizes[0];
+    if (members[1]) test.push({ ...members[1], width: second.width, height: second.height });
     for (const extra of members.slice(2)) claimed.push(extra);
   }
   const catalog = {
@@ -573,7 +698,7 @@ function cmdDiscover() {
 
 function cmdRunProbe(opts, deps) {
   if (!opts.backend) throw new Error("missing --backend");
-  const out = audited({ backend: opts.backend, ...runProbe(opts.backend) }, deps, "run_probe");
+  const out = audited({ backend: opts.backend, ...runProbe(opts.backend, opts) }, deps, "run_probe");
   console.log(JSON.stringify(out, null, 2));
 }
 
@@ -587,13 +712,17 @@ function cmdPlanSplit(opts, deps) {
 
 function cmdMeasureModule(opts, deps) {
   if (!opts.module) throw new Error("missing --module");
-  const kernels = opts.kernels || "D:/WorkStation/samples/libre-dt-lab/data/kernels";
+  const defaultKernels = "D:/WorkStation/samples/libre-dt-lab/data/kernels";
+  const kernels = opts.kernels || (exists(defaultKernels) ? defaultKernels : null);
+  if (!kernels) throw new Error("missing --kernels (no default kernels directory on this machine)");
   const width = opts.width === undefined ? 1920 : Number(opts.width);
   const height = opts.height === undefined ? 1080 : Number(opts.height);
   if (!(Number.isInteger(width) && width > 0)) throw new Error("width must be a positive integer");
   if (!(Number.isInteger(height) && height > 0)) throw new Error("height must be a positive integer");
   const context = {
     module: opts.module,
+    backend: opts.backend || "opencl",
+    project: opts.project || "libre-dt-lab",
     width,
     height,
     catalog: opts.catalog ? path.resolve(opts.catalog).replace(/\\/g, "/") : null,
@@ -603,7 +732,7 @@ function cmdMeasureModule(opts, deps) {
   const ran = spawnSync(exe, [opts.module, kernels, String(width), String(height)], { encoding: "utf8" });
   const text = (ran.stdout || "").trim();
   if (ran.status !== 0) {
-    return audited({ ...blockedRecord(opts.module, text || "measure_failed"), ...context }, deps, "measure_module");
+    return audited({ ...blockedRecord(opts.module, text || "measure_failed", opts.force), ...context }, deps, "measure_module");
   }
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
@@ -611,9 +740,9 @@ function cmdMeasureModule(opts, deps) {
   const stampInfo = catalogStamp(opts.catalog);
   const body = {
     perfbind: 1,
-    backend: "opencl",
+    backend: context.backend,
     probe_set: "module_process_cl",
-    project: "libre-dt-lab",
+    project: context.project,
     protocol: {
       warmup_windows: 3,
       samples: 11,
@@ -681,6 +810,8 @@ function cmdRunTemplate(opts, deps) {
   const context = {
     shape: opts.shape,
     n,
+    backend: opts.backend || "opencl",
+    project: opts.project || "template",
     width,
     height,
     catalog: opts.catalog ? path.resolve(opts.catalog).replace(/\\/g, "/") : null,
@@ -690,7 +821,7 @@ function cmdRunTemplate(opts, deps) {
   const ran = spawnSync(exe, [opts.shape, String(n), String(width), String(height)], { encoding: "utf8" });
   const text = (ran.stdout || "").trim();
   if (ran.status !== 0) {
-    return audited({ ...blockedRecord(`${opts.shape}_${n}`, text || "measure_failed"), ...context }, deps, "run_template");
+    return audited({ ...blockedRecord(`${opts.shape}_${n}`, text || "measure_failed", opts.force), ...context }, deps, "run_template");
   }
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
@@ -698,9 +829,9 @@ function cmdRunTemplate(opts, deps) {
   const stampInfo = catalogStamp(opts.catalog);
   const body = {
     perfbind: 1,
-    backend: "opencl",
+    backend: context.backend,
     probe_set: "shape_template",
-    project: "template",
+    project: context.project,
     protocol: {
       warmup_windows: 3,
       samples: 11,

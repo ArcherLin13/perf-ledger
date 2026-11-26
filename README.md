@@ -57,15 +57,15 @@ agent 工具和命令的对应关系（工具都在 `ledger` 命名空间下）�
 | 工具 | 命令 |
 | --- | --- |
 | `ledger_discover_platform` | `discover` |
-| `ledger_run_probe` | `run-probe --backend <id>` |
+| `ledger_run_probe` | `run-probe --backend <id> [--force true]` |
 | `ledger_commit_prices` | `commit-prices --record <file> --platform <id>` |
-| `ledger_plan_split` | `plan-split --src <dir> --out <file>` |
+| `ledger_plan_split` | `plan-split --src <dir> --out <file> [--sizes 1216x2688,4000x3000]` |
 | `ledger_scan_iop` | `scan-iop --src <dir>` |
 | `ledger_annotate_features` | `annotate-features --catalog <file> --kernels <dir>` |
 | `ledger_freeze_tests` | `freeze-tests --catalog <file>` |
 | `ledger_score` | `score --catalog <file>` |
-| `ledger_measure_module` | `measure-module --module <id> [--width W --height H]` |
-| `ledger_run_template` | `run-template --shape lut\|arith\|halo\|launch --n <n> [--width W --height H]` |
+| `ledger_measure_module` | `measure-module --module <id> [--width W --height H] [--backend <id> --project <name>]` |
+| `ledger_run_template` | `run-template --shape lut\|arith\|halo\|launch --n <n> [--width W --height H] [--backend <id> --project <name>]` |
 | `ledger_exam_predict` | `exam-predict --catalog <file> --item <id> --features <json\|@file>` |
 | `ledger_exam_score` | `exam-score --catalog <file> --exam <id> --record <file> --metric <id>` |
 | `ledger_min_ledger` | `min-ledger --catalog <file>` |
@@ -78,7 +78,7 @@ agent 工具和命令的对应关系（工具都在 `ledger` 命名空间下）�
 
 经验的防漂移机制，四条：
 
-- **写入查重**：`measure-module`/`run-template` 发现同 probe 集、同指标、同 catalog sha、中位数差 ≤3% 的 accepted 记录时拒绝写盘，返回 `duplicate_of`。跨 session 复测（比如验证实例运气）用 `--force true`。
+- **写入查重**：`measure-module`/`run-template`/`run-probe` 发现同 probe 集、同指标、同 catalog sha、同结构化尺寸（`width`/`height`/`param`/`bytes`，两边都带时）、中位数差 ≤3% 的 accepted 记录时拒绝写盘，返回 `duplicate_of`；blocked 记录同一阻塞原因只留一份。跨 session 复测（比如验证实例运气）用 `--force true`。
 - **版本失效**：带 `--catalog` 测量的记录钉上该目录的 sha。`bump-sha` 把目录 sha 往前推之后，旧记录变 stale：拟合排除、冻结考题判 `stale_record`，但文件永留磁盘可查。新 sha 下重测即可刷新。设计来自 Zep 的双时间线：失效不删除。
 - **周期体检**：`doctor` 只读，出处方——sha 漂移、悬空指针、stale、孤儿记录、漏网重复、平台探针超期。仓库或平台可能变过就跑一次。
 - **冷热分层**：热=拟合系数+冻结考题；温=catalog 引用的 accepted 记录；冷=其余全部记录+审计。冷数据只可归档移动，永不删除；审计是账本本身，永不清空。
@@ -137,7 +137,7 @@ node expert/cli.js run-probe --backend ascend_npu
 node expert/cli.js run-probe --backend ascend_aiv
 ```
 
-成功时 `ok` 为 true，`prices_written` 为 false。单价要等下一步。`record` 是新文件，形如 `records/hardware/<时间戳>-<backend>.json`。
+成功时 `ok` 为 true，`prices_written` 为 false。单价要等下一步。`record` 是新文件，形如 `records/hardware/<时间戳>-<backend>.json`。和上次全指标差 ≤3% 的 run 会被去重（`duplicate_of`），同原因 blocked 只留一份；刻意重测加 `--force true`。
 
 失败时 `ok` 为 false，`blocked` 是原因，`prices_written` 为 false。记录里的 `median` 是 null，`status` 是 `blocked`。这种记录不能引用成带宽，也不能拿去 `commit-prices`。
 

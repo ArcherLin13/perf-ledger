@@ -764,6 +764,22 @@ function cmdLaunchFit(opts) {
   console.log(JSON.stringify(body, null, 2));
 }
 
+// Which clock produced a record: read the record's own identity first
+// (probe set, metric clock), fall back to the legacy path heuristic only
+// when the file is unreadable.
+function clockOfRecord(source) {
+  try {
+    const doc = JSON.parse(fs.readFileSync(path.resolve(source), "utf8"));
+    if (doc.probe_set === "module_process_cl") return "module_wall";
+    const metric = (doc.metrics || [])[0];
+    if (metric && metric.clock === "process_cl") return "module_wall";
+    if (doc.probe_set) return "device_event";
+  } catch {
+    // fall through to the path heuristic
+  }
+  return source.includes("darktable") ? "module_wall" : "device_event";
+}
+
 function cmdAccuracy() {
   const db = openDb();
   const rows = db
@@ -777,7 +793,7 @@ function cmdAccuracy() {
   const items = rows.map((row) => {
     const accuracy = 1 - Math.abs(row.measured_ms - row.report_ms) / row.measured_ms;
     const source = row.source_record || "";
-    const clock = source.includes("darktable") ? "module_wall" : "device_event";
+    const clock = clockOfRecord(source);
     return {
       anchor_id: row.anchor_id,
       estimate_id: row.estimate_id,

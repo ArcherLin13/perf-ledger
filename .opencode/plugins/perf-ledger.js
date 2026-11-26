@@ -72,8 +72,9 @@ export default Plugin.define({
           description: "Compile and run the price probe for one backend. Writes records into records/.",
           input: {
             backend: enumOf(BACKENDS, "Probe backend to run."),
+            force: { type: "boolean", description: "Write even when an equivalent accepted or blocked record exists." },
           },
-          args: (v) => ["run-probe", "--backend", v.backend],
+          args: (v) => ["run-probe", "--backend", v.backend, v.force ? ["--force", "true"] : []].flat(),
         }),
         ledgerTool({
           name: "commit_prices",
@@ -91,8 +92,9 @@ export default Plugin.define({
           input: {
             src: str("Repository source directory, relative to the project root."),
             out: str("Output JSON path, for example catalog/<name>.json."),
+            sizes: str("Planned exam sizes, comma-separated WxH. Default 1920x1080,2560x1440; phones pass native sizes."),
           },
-          args: (v) => ["plan-split", "--src", v.src, "--out", v.out],
+          args: (v) => ["plan-split", "--src", v.src, "--out", v.out, v.sizes ? ["--sizes", v.sizes] : []].flat(),
         }),
         ledgerTool({
           name: "scan_iop",
@@ -147,6 +149,8 @@ export default Plugin.define({
             height: int("Image height in pixels."),
             catalog: str("Catalog the measurement certifies; stamps the record with its sha and enables dedup."),
             force: { type: "boolean", description: "Write even when an equivalent accepted record exists (cross-session validation)." },
+            backend: str("Backend id recorded as provenance (default opencl)."),
+            project: str("Project name recorded as provenance (default libre-dt-lab)."),
           },
           args: (v) =>
             [
@@ -158,6 +162,8 @@ export default Plugin.define({
               v.height !== undefined ? ["--height", String(v.height)] : [],
               v.catalog ? ["--catalog", v.catalog] : [],
               v.force ? ["--force", "true"] : [],
+              v.backend ? ["--backend", v.backend] : [],
+              v.project ? ["--project", v.project] : [],
             ].flat(),
         }),
         ledgerTool({
@@ -170,6 +176,8 @@ export default Plugin.define({
             height: int("Image height in pixels."),
             catalog: str("Catalog the measurement certifies; stamps the record with its sha and enables dedup."),
             force: { type: "boolean", description: "Write even when an equivalent accepted record exists (cross-session validation)." },
+            backend: str("Backend id recorded as provenance (default opencl)."),
+            project: str("Project name recorded as provenance (default template)."),
           },
           args: (v) =>
             [
@@ -182,6 +190,8 @@ export default Plugin.define({
               v.height !== undefined ? ["--height", String(v.height)] : [],
               v.catalog ? ["--catalog", v.catalog] : [],
               v.force ? ["--force", "true"] : [],
+              v.backend ? ["--backend", v.backend] : [],
+              v.project ? ["--project", v.project] : [],
             ].flat(),
         }),
         ledgerTool({

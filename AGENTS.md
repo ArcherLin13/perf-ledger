@@ -44,9 +44,12 @@ measurement, fit, and verdict.
    falls back to its own path; every CLI call must run with the project
    root as cwd, because catalog and record paths are root-relative.
 6. Records are never deleted. Write-time dedup blocks redundant writes
-   (`--force true` overrides); `bump-sha` moves a catalog's source sha
-   forward and stale records fail as `stale_record` while staying
-   queryable; `doctor` is the periodic read-only health check.
+   on `measure-module`, `run-template`, and `run-probe` — same probe set,
+   metric id, catalog sha, and structured dimensions, median within 3%;
+   a blocked record is kept once per blocker reason (`--force true`
+   overrides both). `bump-sha` moves a catalog's source sha forward and
+   stale records fail as `stale_record` while staying queryable;
+   `doctor` is the periodic read-only health check.
 7. Every CLI action — verdict layer and work layer alike — appends an
    audit row with its full inputs and outputs. The view's timeline tab
    replays a campaign grouped by catalog; use it (or `cli.js audit`)

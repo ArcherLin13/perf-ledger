@@ -31,6 +31,67 @@ function table(headers, rows) {
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+// Group the flat audit log into campaigns: rows that carry detail.catalog
+// belong to that catalog's campaign; the rest are platform-level events.
+function timelineGroups(auditRowsAsc) {
+  const groups = new Map();
+  for (const row of auditRowsAsc) {
+    let detail = {};
+    try {
+      detail = JSON.parse(row.detail);
+    } catch {
+      detail = {};
+    }
+    const key = typeof detail.catalog === "string" && detail.catalog ? detail.catalog : "";
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        label: key ? key.split("/").pop() : "平台层（无 catalog）",
+        sha: null,
+        rows: [],
+        first: row.created_at,
+        last: row.created_at,
+      };
+      groups.set(key, group);
+    }
+    if (detail.catalog_sha) group.sha = String(detail.catalog_sha).slice(0, 8);
+    group.rows.push(row);
+    group.last = row.created_at;
+  }
+  const list = [...groups.values()];
+  const labelCount = new Map();
+  for (const group of list) labelCount.set(group.label, (labelCount.get(group.label) || 0) + 1);
+  for (const group of list) {
+    if (group.key && labelCount.get(group.label) > 1) {
+      group.label = group.key.split("/").slice(-2).join("/");
+    }
+  }
+  return list;
+}
+
+function timelineTable(groups) {
+  if (!groups.length) {
+    return `<table><tbody><tr class="empty-row"><td colspan="3">还没有记录</td></tr></tbody></table>`;
+  }
+  const rows = [];
+  for (const group of groups) {
+    const sha = group.sha ? ` @${group.sha}` : "";
+    const firstDay = group.first.slice(0, 10);
+    const lastDay = group.last.slice(0, 10);
+    const span = firstDay === lastDay ? firstDay : `${firstDay} → ${lastDay}`;
+    rows.push(
+      `<tr class="group-row"><td colspan="3">${esc(group.label)}${esc(sha)} · ${group.rows.length} 条 · ${esc(span)}</td></tr>`
+    );
+    for (const row of group.rows) {
+      rows.push(
+        `<tr><td>${esc(row.created_at)}</td><td>${esc(row.action)}</td><td>${esc(summarize(row, false))}</td></tr>`
+      );
+    }
+  }
+  return `<table><thead><tr><th>时间</th><th>动作</th><th>摘要</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+
 function page() {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   const prices = db.prepare("SELECT * FROM prices ORDER BY platform_id, price_id").all();
@@ -43,6 +104,12 @@ function page() {
   db.close();
 
   const sections = [
+    {
+      id: "timeline",
+      title: "战役时间线",
+      count: audit.length,
+      body: timelineTable(timelineGroups([...audit].reverse())),
+    },
     {
       id: "prices",
       title: "平台单价",
@@ -203,6 +270,7 @@ function page() {
     th { font-size: 12px; color: #555; font-weight: 650; }
     td { font-variant-numeric: tabular-nums; }
     .empty-row td { color: #999; }
+    .group-row td { background: #f0f0f0; font-weight: 650; font-size: 12px; color: #444; }
     code { font-family: ui-monospace, monospace; font-size: 12px; }
   </style>
   <noscript><style>.panel { display: block; }</style></noscript>
@@ -268,10 +336,10 @@ function shortRef(detail) {
   return "";
 }
 
-function summarize(row) {
+function summarize(row, includeRef = true) {
   const detail = JSON.parse(row.detail);
   const ref = shortRef(detail);
-  const at = ref ? `${ref} ` : "";
+  const at = includeRef && ref ? `${ref} ` : "";
   if (row.action === "estimate") {
     const text = detail.refused
       ? `拒绝 ${detail.shape}：${detail.refuse_reason}`
@@ -295,6 +363,56 @@ function summarize(row) {
   }
   if (row.action === "exam_score") {
     return `${at}${detail.item} ${detail.verdict} 准确率 ${Number(detail.accuracy).toFixed(3)}`;
+  }
+  if (row.action === "run_probe") {
+    return detail.ok ? `探针 ${detail.backend} 成功` : `探针 ${detail.backend} 受阻 ${detail.blocked}`;
+  }
+  if (row.action === "commit_prices") {
+    return `写价 ${detail.platform_id}：成功 ${detail.written.length} 跳过 ${detail.skipped.length}`;
+  }
+  if (row.action === "plan_split") {
+    return `划分 训 ${detail.train.length} 考 ${detail.test.length} 认领 ${detail.claimed.length} 测量预算 ${detail.exam_budget_runs}`;
+  }
+  if (row.action === "scan_iop") {
+    const by = detail.by_decision || {};
+    return `扫描 ${detail.files} 文件：可计价 ${by.module_wall || 0} 分支 ${by.needs_branch || 0} 拒绝 ${by.refuse || 0}`;
+  }
+  if (row.action === "annotate_features") return `特征标注 ${detail.modules.length} 模块`;
+  if (row.action === "measure_module") {
+    if (!detail.metric) return `测量 ${detail.module} 受阻 ${detail.blocked}`;
+    const dup = detail.dedup === "skipped_write" ? "（去重未写盘）" : "";
+    return `测量 ${detail.module} ${detail.metric.status} ${ms(detail.metric.median)}ms${dup}`;
+  }
+  if (row.action === "run_template") {
+    if (!detail.metric) return `模板 ${detail.shape}×${detail.n} 受阻 ${detail.blocked}`;
+    const dup = detail.dedup === "skipped_write" ? "（去重未写盘）" : "";
+    return `模板 ${detail.shape}×${detail.n} ${detail.metric.status} ${ms(detail.metric.median)}ms${dup}`;
+  }
+  if (row.action === "min_ledger") {
+    const ambiguous = detail.model_ambiguous ? "（模型歧义）" : "";
+    return `最小账本 ${detail.minimum_measurements} 条训练：${detail.formula}${ambiguous}`;
+  }
+  if (row.action === "bump_sha") {
+    const prev = detail.previous_sha ? String(detail.previous_sha).slice(0, 8) : "（无）";
+    const next = detail.sha ? String(detail.sha).slice(0, 8) : "（无）";
+    return `sha ${prev} → ${next}，${(detail.stale_after_bump || []).length} 条转 stale`;
+  }
+  if (row.action === "launch_fit") {
+    const file = detail.record ? String(detail.record).split("/").pop() : "";
+    const shared = detail.shared_fixed ? `，共享固定开销 ${ms(detail.shared_fixed.fixed_ms)}ms` : "";
+    return `发射拟合 ${file}：${Object.keys(detail.kernels || {}).length} 个 kernel${shared}`;
+  }
+  if (row.action === "wall_fit") {
+    return `墙上拟合 base ${ms(detail.base_ms)} + rgb ${ms(detail.rgb_ms)} + 额外kernel ${ms(detail.extra_kernel_ms)} + halo ${ms(detail.halo_ms)}`;
+  }
+  if (row.action === "platform_price") {
+    return `单价 ${detail.platform_id} ${detail.price_id} = ${detail.value}`;
+  }
+  if (row.action === "module_price") {
+    return `模块价 ${detail.module_id} = ${ms(detail.value)} ${detail.unit}`;
+  }
+  if (row.action === "scenario_check") {
+    return `核对 ${detail.scenario_id} ${detail.verdict} 残差 ${Number(detail.residual_ratio).toFixed(3)}`;
   }
   return at + row.action;
 }

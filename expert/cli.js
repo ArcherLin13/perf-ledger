@@ -961,7 +961,9 @@ function main() {
   if (command === "bump-sha") {
     return require("./project_ledger").cmdBumpSha(opts, { openDb, audit });
   }
-  if (command === "scan-iop") return require("./project_ledger").cmdScanIop(opts);
+  if (command === "scan-iop") {
+    return require("./project_ledger").cmdScanIop(opts, { openDb, audit });
+  }
   if (command === "min-ledger") {
     return require("./project_ledger").cmdMinLedger(opts, { openDb, solveLinear, audit });
   }
@@ -972,16 +974,24 @@ function main() {
     return require("./project_ledger").cmdScore(opts, { openDb, solveLinear, audit });
   }
   if (command === "discover") return require("./bringup.cjs").cmdDiscover();
-  if (command === "run-probe") return require("./bringup.cjs").cmdRunProbe(opts);
-  if (command === "commit-prices") return require("./bringup.cjs").cmdCommitPrices(opts);
-  if (command === "plan-split") return require("./bringup.cjs").cmdPlanSplit(opts);
-  if (command === "annotate-features") return require("./project_ledger").cmdAnnotateFeatures(opts);
+  if (command === "run-probe") return require("./bringup.cjs").cmdRunProbe(opts, { openDb, audit });
+  if (command === "commit-prices") {
+    return require("./bringup.cjs").cmdCommitPrices(opts, { openDb, audit });
+  }
+  if (command === "plan-split") {
+    return require("./bringup.cjs").cmdPlanSplit(opts, { openDb, audit });
+  }
+  if (command === "annotate-features") {
+    return require("./project_ledger").cmdAnnotateFeatures(opts, { openDb, audit });
+  }
   if (command === "measure-module") {
-    console.log(JSON.stringify(require("./bringup.cjs").cmdMeasureModule(opts), null, 2));
+    const out = require("./bringup.cjs").cmdMeasureModule(opts, { openDb, audit });
+    console.log(JSON.stringify(out, null, 2));
     return;
   }
   if (command === "run-template") {
-    console.log(JSON.stringify(require("./bringup.cjs").cmdRunTemplate(opts), null, 2));
+    const out = require("./bringup.cjs").cmdRunTemplate(opts, { openDb, audit });
+    console.log(JSON.stringify(out, null, 2));
     return;
   }
   if (command === "exam-predict") {

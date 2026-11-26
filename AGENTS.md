@@ -47,6 +47,10 @@ measurement, fit, and verdict.
    (`--force true` overrides); `bump-sha` moves a catalog's source sha
    forward and stale records fail as `stale_record` while staying
    queryable; `doctor` is the periodic read-only health check.
+7. Every CLI action — verdict layer and work layer alike — appends an
+   audit row with its full inputs and outputs. The view's timeline tab
+   replays a campaign grouped by catalog; use it (or `cli.js audit`)
+   instead of reconstructing history from git.
 
 ## Verifying changes
 

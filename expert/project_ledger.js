@@ -208,9 +208,21 @@ function scanIop(srcDir) {
   return { src: abs.replace(/\\/g, "/"), files: modules.length, by_decision: byDecision, by_reason: byReason, modules };
 }
 
-function cmdScanIop(opts) {
+function cmdScanIop(opts, deps) {
   if (!opts.src) throw new Error("missing --src");
-  console.log(JSON.stringify(scanIop(opts.src), null, 2));
+  const out = scanIop(opts.src);
+  if (deps && deps.openDb && deps.audit) {
+    const ids = {};
+    for (const item of out.modules) (ids[item.decision] ||= []).push(item.id);
+    out.audit_id = deps.audit(deps.openDb(), "scan_iop", null, {
+      src: out.src,
+      files: out.files,
+      by_decision: out.by_decision,
+      by_reason: out.by_reason,
+      ids,
+    });
+  }
+  console.log(JSON.stringify(out, null, 2));
 }
 
 function combinations(items, k) {
@@ -951,7 +963,7 @@ function lookupWideFor(kernelDir, id) {
   return { lookup_wide: found.lookup_wide, kernel_file: found.kernel_file };
 }
 
-function cmdAnnotateFeatures(opts) {
+function cmdAnnotateFeatures(opts, deps) {
   if (!opts.catalog) throw new Error("missing --catalog");
   if (!opts.kernels) throw new Error("missing --kernels");
   const catalog = JSON.parse(fs.readFileSync(path.resolve(opts.catalog), "utf8"));
@@ -966,7 +978,11 @@ function cmdAnnotateFeatures(opts) {
     annotated.push({ id: entry.id, ...found });
   }
   fs.writeFileSync(path.resolve(opts.catalog), JSON.stringify(catalog, null, 2));
-  console.log(JSON.stringify({ catalog: path.resolve(opts.catalog).replace(/\\/g, "/"), modules: annotated }, null, 2));
+  const out = { catalog: path.resolve(opts.catalog).replace(/\\/g, "/"), modules: annotated };
+  if (deps && deps.openDb && deps.audit) {
+    out.audit_id = deps.audit(deps.openDb(), "annotate_features", null, out);
+  }
+  console.log(JSON.stringify(out, null, 2));
 }
 
 // The graduation exam: predict a feature vector you have never measured,

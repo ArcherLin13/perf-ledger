@@ -17,10 +17,11 @@ darktable 的模块源码留在 `D:/WorkStation/PerfRepo/upstream/darktable/src/
 | `.opencode/skills/ledger-rules/SKILL.md` | 引用数字、拒绝模块、两套时钟、已知限制 |
 | `.opencode/plugins/perf-ledger.js` | 插件，命名空间 `ledger`，17 个工具，内部都是 `node expert/cli.js` |
 | `opencode.jsonc` | `default_agent` 指到 perf-ledger |
+| `docs/campaign-files.md` | 战役文件契约：catalog 字段所有权、records 布局、audit 两层流水 |
 | `expert/cli.js` | 命令行。`expert/package.json` 把这一层标成 CommonJS |
 | `expert/bringup.cjs` | `discover`、`run-probe`、`commit-prices`、`plan-split`、`measure-module`、`run-template` |
 | `expert/project_ledger.js` | `scan-iop`、`annotate-features`、`freeze-tests`、`score`、`min-ledger`、`exam-predict`、`exam-score` |
-| `expert/perfexpert.sqlite` | 单价、模块价、核对记录、审计（冻结/评分/封盘都在 audit 表） |
+| `expert/perfexpert.sqlite` | 单价、模块价、核对记录、审计（工作层动作和判决在同一张 audit 表） |
 | `probes/` | CPU、OpenCL、Ascend NPU、Ascend AIV 的探针源码，外加 `module_pipe.c`（真模块计时）和 `template_pipe.c`（形状模板实例计时） |
 | `records/hardware/` | 每次探针一个新文件，不覆盖旧文件 |
 | `records/darktable/` | 已测过的 darktable 墙上时间 |
@@ -49,7 +50,7 @@ opencode
 node expert/cli.js view
 ```
 
-打开 http://127.0.0.1:8765 。这是整份 sqlite，包含平台单价和历史核对，不只是训练集。页面分七个 tab（平台单价、模块单价、场景核对、形状、估算、锚点、审计），顶部搜索框一次过滤所有 tab，按 `/` 聚焦。
+打开 http://127.0.0.1:8765 。这是整份 sqlite，包含平台单价和历史核对，不只是训练集。页面分八个 tab：战役时间线（按 catalog 分组回放 audit 流水，一场战役从划分到评分一目了然）、平台单价、模块单价、场景核对、形状、估算、锚点、审计（全表）。顶部搜索框一次过滤所有 tab，按 `/` 聚焦。
 
 agent 工具和命令的对应关系（工具都在 `ledger` 命名空间下）：
 

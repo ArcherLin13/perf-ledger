@@ -40,6 +40,10 @@ Run the CLI under Node, never Bun.
   `stale_record` while staying on disk, queryable.
 - `doctor` is the periodic read-only health check. It prescribes; the
   operator acts.
+- Every CLI action — verdict layer and work layer alike — appends an
+  audit row with its full inputs and outputs. The view's timeline tab
+  replays a campaign grouped by catalog; use it (or `cli.js audit`)
+  instead of reconstructing history from git.
 
 ## Pointers
 

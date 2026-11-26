@@ -56,6 +56,7 @@ When several smallest formulas fit the training pool, the data cannot tell them 
 - **Version invalidation.** A record measured with `catalog` set is stamped with the catalog's sha. After `bump_sha` moves the catalog forward, those records are stale: fits exclude them, a frozen test holding one fails with `stale_record`, and the files stay on disk and queryable. Re-measure under the new sha to refresh. Never delete the old ones.
 - **Periodic health check.** `doctor` is read-only and prints a prescription: sha drift against the source HEAD, dangling record pointers, stale records, orphan records, duplicates the gate missed, and platform probes older than 30 days. Run it when a repository or a platform may have moved; act on the prescription yourself.
 - **Tiers.** Hot: fitted coefficients and frozen tests. Warm: accepted records the catalogs point at. Cold: every other record plus the audit log. Cold data may be archived (moved to `records/archive/`), never deleted. The audit log is the ledger itself; it is never purged.
+- **Trail.** Verdicts and work actions alike (scan, plan, annotate, measure, probe, commit-prices) append to the same audit table with their full inputs and outputs. Replay a campaign from the view's timeline tab or `cli.js audit`, not from git history.
 
 ## Known limits learned on iris-xe
 

@@ -195,6 +195,16 @@ function writeRecord(backend, body) {
   return file;
 }
 
+// Work-layer actions append to the same audit table as verdicts, so a
+// campaign replays from the log instead of from git history. Deps are
+// optional: callers without a database keep the old unaudited behavior.
+function audited(out, deps, action) {
+  if (deps && deps.openDb && deps.audit) {
+    out.audit_id = deps.audit(deps.openDb(), action, null, out);
+  }
+  return out;
+}
+
 // Write-time dedup, Mem0-V3 style: an equivalent accepted record (same
 // probe set, same metric id, same catalog sha, median within 3%) makes a
 // new write redundant. The check is deterministic; re-measuring on purpose
@@ -561,32 +571,39 @@ function cmdDiscover() {
   console.log(JSON.stringify(discoverBackends(), null, 2));
 }
 
-function cmdRunProbe(opts) {
+function cmdRunProbe(opts, deps) {
   if (!opts.backend) throw new Error("missing --backend");
-  console.log(JSON.stringify(runProbe(opts.backend), null, 2));
+  const out = audited({ backend: opts.backend, ...runProbe(opts.backend) }, deps, "run_probe");
+  console.log(JSON.stringify(out, null, 2));
 }
 
-function cmdCommitPrices(opts) {
-  console.log(JSON.stringify(commitPrices(opts), null, 2));
+function cmdCommitPrices(opts, deps) {
+  console.log(JSON.stringify(audited(commitPrices(opts), deps, "commit_prices"), null, 2));
 }
 
-function cmdPlanSplit(opts) {
-  console.log(JSON.stringify(planSplit(opts), null, 2));
+function cmdPlanSplit(opts, deps) {
+  console.log(JSON.stringify(audited(planSplit(opts), deps, "plan_split"), null, 2));
 }
 
-function cmdMeasureModule(opts) {
+function cmdMeasureModule(opts, deps) {
   if (!opts.module) throw new Error("missing --module");
   const kernels = opts.kernels || "D:/WorkStation/samples/libre-dt-lab/data/kernels";
   const width = opts.width === undefined ? 1920 : Number(opts.width);
   const height = opts.height === undefined ? 1080 : Number(opts.height);
   if (!(Number.isInteger(width) && width > 0)) throw new Error("width must be a positive integer");
   if (!(Number.isInteger(height) && height > 0)) throw new Error("height must be a positive integer");
+  const context = {
+    module: opts.module,
+    width,
+    height,
+    catalog: opts.catalog ? path.resolve(opts.catalog).replace(/\\/g, "/") : null,
+  };
   const exe = path.join(probeDir, "build", process.platform === "win32" ? "module_pipe.exe" : "module_pipe");
   if (!exists(exe)) throw new Error(`missing ${exe}`);
   const ran = spawnSync(exe, [opts.module, kernels, String(width), String(height)], { encoding: "utf8" });
   const text = (ran.stdout || "").trim();
   if (ran.status !== 0) {
-    return blockedRecord(opts.module, text || "measure_failed");
+    return audited({ ...blockedRecord(opts.module, text || "measure_failed"), ...context }, deps, "measure_module");
   }
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
@@ -613,37 +630,47 @@ function cmdMeasureModule(opts) {
   if (opts.force !== "true" && stats.status === "accepted") {
     const dup = findDuplicate(body, stats.median);
     if (dup) {
-      return {
-        ok: true,
-        record: dup.file,
-        duplicate_of: dup.file,
-        dedup: "skipped_write",
-        prices_written: false,
-        metric: {
-          id: metric.id,
-          status: metric.status,
-          median: metric.median,
-          stdev_over_median: metric.stdev_over_median,
+      return audited(
+        {
+          ok: true,
+          record: dup.file,
+          duplicate_of: dup.file,
+          dedup: "skipped_write",
+          prices_written: false,
+          metric: {
+            id: metric.id,
+            status: metric.status,
+            median: metric.median,
+            stdev_over_median: metric.stdev_over_median,
+          },
+          note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
+          ...context,
         },
-        note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
-      };
+        deps,
+        "measure_module"
+      );
     }
   }
   const file = writeRecord(opts.module, body);
-  return {
-    ok: stats.status === "accepted",
-    record: file.replace(/\\/g, "/"),
-    prices_written: false,
-    metric: {
-      id: metric.id,
-      status: metric.status,
-      median: metric.median,
-      stdev_over_median: metric.stdev_over_median,
+  return audited(
+    {
+      ok: stats.status === "accepted",
+      record: file.replace(/\\/g, "/"),
+      prices_written: false,
+      metric: {
+        id: metric.id,
+        status: metric.status,
+        median: metric.median,
+        stdev_over_median: metric.stdev_over_median,
+      },
+      ...context,
     },
-  };
+    deps,
+    "measure_module"
+  );
 }
 
-function cmdRunTemplate(opts) {
+function cmdRunTemplate(opts, deps) {
   if (!opts.shape) throw new Error("missing --shape");
   const n = opts.n === undefined ? NaN : Number(opts.n);
   if (!(Number.isInteger(n) && n >= 1)) throw new Error("n must be a positive integer");
@@ -651,12 +678,19 @@ function cmdRunTemplate(opts) {
   const height = opts.height === undefined ? 1080 : Number(opts.height);
   if (!(Number.isInteger(width) && width > 0)) throw new Error("width must be a positive integer");
   if (!(Number.isInteger(height) && height > 0)) throw new Error("height must be a positive integer");
+  const context = {
+    shape: opts.shape,
+    n,
+    width,
+    height,
+    catalog: opts.catalog ? path.resolve(opts.catalog).replace(/\\/g, "/") : null,
+  };
   const exe = path.join(probeDir, "build", process.platform === "win32" ? "template_pipe.exe" : "template_pipe");
   if (!exists(exe)) throw new Error(`missing ${exe}`);
   const ran = spawnSync(exe, [opts.shape, String(n), String(width), String(height)], { encoding: "utf8" });
   const text = (ran.stdout || "").trim();
   if (ran.status !== 0) {
-    return blockedRecord(`${opts.shape}_${n}`, text || "measure_failed");
+    return audited({ ...blockedRecord(`${opts.shape}_${n}`, text || "measure_failed"), ...context }, deps, "run_template");
   }
   const parsed = JSON.parse(text);
   const stats = summarize(parsed.samples);
@@ -683,34 +717,44 @@ function cmdRunTemplate(opts) {
   if (opts.force !== "true" && stats.status === "accepted") {
     const dup = findDuplicate(body, stats.median);
     if (dup) {
-      return {
-        ok: true,
-        record: dup.file,
-        duplicate_of: dup.file,
-        dedup: "skipped_write",
-        prices_written: false,
-        metric: {
-          id: metric.id,
-          status: metric.status,
-          median: metric.median,
-          stdev_over_median: metric.stdev_over_median,
+      return audited(
+        {
+          ok: true,
+          record: dup.file,
+          duplicate_of: dup.file,
+          dedup: "skipped_write",
+          prices_written: false,
+          metric: {
+            id: metric.id,
+            status: metric.status,
+            median: metric.median,
+            stdev_over_median: metric.stdev_over_median,
+          },
+          note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
+          ...context,
         },
-        note: "an equivalent accepted record exists within 3%; rerun with --force true to keep a new sample",
-      };
+        deps,
+        "run_template"
+      );
     }
   }
   const file = writeRecord(`${opts.shape}_${n}`, body);
-  return {
-    ok: stats.status === "accepted",
-    record: file.replace(/\\/g, "/"),
-    prices_written: false,
-    metric: {
-      id: metric.id,
-      status: metric.status,
-      median: metric.median,
-      stdev_over_median: metric.stdev_over_median,
+  return audited(
+    {
+      ok: stats.status === "accepted",
+      record: file.replace(/\\/g, "/"),
+      prices_written: false,
+      metric: {
+        id: metric.id,
+        status: metric.status,
+        median: metric.median,
+        stdev_over_median: metric.stdev_over_median,
+      },
+      ...context,
     },
-  };
+    deps,
+    "run_template"
+  );
 }
 
 module.exports = {

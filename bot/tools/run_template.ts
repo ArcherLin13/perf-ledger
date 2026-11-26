@@ -12,16 +12,20 @@ export default defineTool({
     height: z.number().int().positive().optional(),
     catalog: z.string().min(1).optional(),
     force: z.boolean().optional(),
+    backend: z.string().min(1).optional().describe("Backend id recorded as provenance (default opencl)."),
+    project: z.string().min(1).optional().describe("Project name recorded as provenance (default template)."),
   }),
   effect: "write",
   dryRunResult: ({ shape, n }) => ({ ok: false, skipped: true, reason: "dry-run", shape, n }),
-  async execute({ shape, n, width, height, catalog, force }, ctx) {
+  async execute({ shape, n, width, height, catalog, force, backend, project }, ctx) {
     if (ctx.session.purpose === "eval") return { ok: false, skipped: true, reason: "eval", shape, n };
     const args = ["run-template", "--shape", shape, "--n", String(n)];
     if (width !== undefined) args.push("--width", String(width));
     if (height !== undefined) args.push("--height", String(height));
     if (catalog) args.push("--catalog", catalog);
     if (force) args.push("--force", "true");
+    if (backend) args.push("--backend", backend);
+    if (project) args.push("--project", project);
     return runLedger(args);
   },
 });

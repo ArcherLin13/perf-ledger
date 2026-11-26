@@ -12,10 +12,12 @@ export default defineTool({
     height: z.number().int().positive().optional(),
     catalog: z.string().min(1).optional(),
     force: z.boolean().optional(),
+    backend: z.string().min(1).optional().describe("Backend id recorded as provenance (default opencl)."),
+    project: z.string().min(1).optional().describe("Project name recorded as provenance (default libre-dt-lab)."),
   }),
   effect: "write",
   dryRunResult: ({ module }) => ({ ok: false, skipped: true, reason: "dry-run", module }),
-  async execute({ module, kernels, width, height, catalog, force }, ctx) {
+  async execute({ module, kernels, width, height, catalog, force, backend, project }, ctx) {
     if (ctx.session.purpose === "eval") return { ok: false, skipped: true, reason: "eval", module };
     const args = ["measure-module", "--module", module];
     if (kernels) args.push("--kernels", kernels);
@@ -23,6 +25,8 @@ export default defineTool({
     if (height !== undefined) args.push("--height", String(height));
     if (catalog) args.push("--catalog", catalog);
     if (force) args.push("--force", "true");
+    if (backend) args.push("--backend", backend);
+    if (project) args.push("--project", project);
     return runLedger(args);
   },
 });

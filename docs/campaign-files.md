@@ -44,10 +44,12 @@ git 历史拼凑。
 ## records/
 
 - `records/hardware/`：唯一活跃池。`run-probe`、`measure-module`、
-  `run-template` 都写这里，一次运行一个文件，时间戳命名，只增不改。写时查重
-  （同 probe 集 + 同指标 id + 同 catalog sha + 中位数差 ≤3%）拒绝写盘并返回
-  `duplicate_of`；`--force true` 覆盖。blocked 或方差拒收的运行也写文件
-  （`status` 标明），它们不是证据。
+  `run-template` 都写这里，一次运行一个文件，时间戳命名（同毫秒撞名加序号，
+  永不覆盖），只增不改。写时查重（同 probe 集 + 同指标 id + 同 catalog sha +
+  同结构化尺寸 `width`/`height`/`param`/`bytes`，两边都带时 + 中位数差 ≤3%）
+  拒绝写盘并返回 `duplicate_of`；blocked 记录同一阻塞原因只留一份；
+  `--force true` 覆盖两者。方差拒收的运行也写文件（`status` 和 `reason`
+  标明，含实际样本数），它们不是证据。
 - `records/darktable/`：darktable 战役的遗留池，`catalog/darktable.json`
   仍指向它。新测量不进这里。
 - `records/archive/`：`doctor` 处方里孤儿记录的去处。移动可以，删除不行。

@@ -34,8 +34,11 @@ Run the CLI under Node, never Bun.
 
 ## Experience store invariants
 
-- Records are never deleted. Write-time dedup blocks redundant writes
-  (`--force true` overrides for intentional cross-session validation).
+- Records are never deleted. Write-time dedup blocks redundant writes on
+  `measure-module`, `run-template`, and `run-probe` — same probe set,
+  metric id, catalog sha, and structured dimensions, median within 3%; a
+  blocked record is kept once per blocker reason (`--force true`
+  overrides both, for intentional cross-session validation).
 - `bump-sha` moves a catalog's source sha forward; stale records fail as
   `stale_record` while staying on disk, queryable.
 - `doctor` is the periodic read-only health check. It prescribes; the
